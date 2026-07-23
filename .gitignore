@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+data/
+uploads/
+screenshots/
+*.zip
+*.key
+*.pem
+coverage/
+*.log
+.idea/
+.vscode/

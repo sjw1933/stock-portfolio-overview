@@ -1,0 +1,15 @@
+services:
+  gup-risk:
+    build:
+      context: .
+      dockerfile: Dockerfile.risk
+    container_name: gup-risk
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 8791
+      FRONTEND_ORIGIN: https://portfolio.example.com
+      SNAPSHOT_FILE: /app/data/snapshot.json
+    volumes:
+      - ./data:/app/data
