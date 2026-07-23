@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { AccountSnapshot, AggregatedHolding, AiApiConfig, Currency, Holding, HoldingNewsItem, HoldingNewsStatus, PortfolioSummary, QuoteStatus, RiskAlert, RiskAnalysisStatus, SavedSnapshot, SellInput, SellRecord, SnapshotDraft, Tab } from './types';
+import type { AccountSnapshot, AggregatedHolding, AiApiConfig, BuyInput, BuyRecord, Currency, Holding, HoldingNewsItem, HoldingNewsStatus, ImportAuditRecord, PortfolioSummary, QuoteStatus, RiskAlert, RiskAnalysisStatus, SavedSnapshot, SellInput, SellRecord, SnapshotDraft, Tab } from './types';
 
 export type AppContext = {
   tab: Tab;
@@ -18,8 +18,12 @@ export type AppContext = {
   holdings: Holding[];
   accountSnapshots: AccountSnapshot[];
   savedSnapshot: SavedSnapshot | null;
+  buyRecords: BuyRecord[];
   sellRecords: SellRecord[];
+  importLogs: ImportAuditRecord[];
   saveDraftSnapshot: (draft: SnapshotDraft, fileNames: string[]) => void | Promise<void>;
+  registerBuy: (input: BuyInput) => Promise<void>;
+  revokeBuy: (recordId: string) => Promise<void>;
   registerSell: (holding: Holding, input: SellInput) => Promise<void>;
   revokeSell: (recordId: string) => Promise<void>;
   resetSnapshot: () => void;

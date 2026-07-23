@@ -131,8 +131,10 @@ async function deleteSharedSnapshot() {
 function normalizeSharedSnapshot(snapshot) {
   const holdings = Array.isArray(snapshot?.holdings) ? snapshot.holdings.map(normalizeSharedHolding).filter(Boolean) : [];
   const accountSnapshots = Array.isArray(snapshot?.accountSnapshots) ? snapshot.accountSnapshots.map(normalizeSharedAccount).filter(Boolean) : [];
+  const buyRecords = Array.isArray(snapshot?.buyRecords) ? snapshot.buyRecords.map(normalizeBuyRecord).filter(Boolean) : [];
   const sellRecords = Array.isArray(snapshot?.sellRecords) ? snapshot.sellRecords.map(normalizeSellRecord).filter(Boolean) : [];
-  if (!holdings.length && !accountSnapshots.length && !sellRecords.length) throw new Error('snapshot is empty');
+  const importLogs = Array.isArray(snapshot?.importLogs) ? snapshot.importLogs.map(normalizeImportLog).filter(Boolean).slice(0, 80) : [];
+  if (!holdings.length && !accountSnapshots.length && !buyRecords.length && !sellRecords.length) throw new Error('snapshot is empty');
   const savedAt = normalizeIsoDateTime(snapshot?.savedAt) || new Date().toISOString();
   const positionsUpdatedAt = normalizeIsoDateTime(snapshot?.positionsUpdatedAt) || savedAt;
   const accountPositionsUpdatedAt = normalizeAccountPositionTimes(snapshot?.accountPositionsUpdatedAt);
@@ -142,7 +144,7 @@ function normalizeSharedSnapshot(snapshot) {
   }
   return {
     revision: Math.max(0, Math.floor(Number(snapshot?.revision) || 0)),
-    source: snapshot?.source === 'default' ? 'default' : 'ocr',
+    source: snapshot?.source === 'default' ? 'default' : snapshot?.source === 'manual' ? 'manual' : 'ocr',
     savedAt,
     positionsUpdatedAt,
     accountPositionsUpdatedAt,
@@ -150,7 +152,9 @@ function normalizeSharedSnapshot(snapshot) {
     warnings: Array.isArray(snapshot?.warnings) ? snapshot.warnings.map((item) => String(item).slice(0, 240)) : [],
     holdings,
     accountSnapshots,
+    buyRecords,
     sellRecords,
+    importLogs,
   };
 }
 
@@ -228,6 +232,70 @@ function normalizeSellRecord(item) {
     note: String(item?.note || '').trim().slice(0, 240),
     createdAt,
     ...(item?.status === 'reversed' && normalizeIsoDateTime(item?.reversedAt) ? { reversedAt: normalizeIsoDateTime(item.reversedAt) } : {}),
+  };
+}
+
+function normalizeBuyRecord(item) {
+  const symbol = String(item?.symbol || '').trim().toUpperCase();
+  const qty = Number(item?.qty);
+  const price = Number(item?.price);
+  const fees = Number(item?.fees ?? 0);
+  const totalCost = Number(item?.totalCost ?? (price * qty + fees));
+  const beforeQty = Number(item?.beforeQty ?? 0);
+  const afterQty = Number(item?.afterQty);
+  const beforeCost = Number(item?.beforeCost ?? 0);
+  const afterCost = Number(item?.afterCost);
+  const positionPriceAtBuy = Number(item?.positionPriceAtBuy ?? price);
+  const tradedAt = normalizeIsoDateTime(item?.tradedAt);
+  const createdAt = normalizeIsoDateTime(item?.createdAt);
+  if (!symbol || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0) return null;
+  if (!Number.isFinite(fees) || fees < 0 || !Number.isFinite(totalCost) || totalCost <= 0) return null;
+  if (!Number.isFinite(beforeQty) || beforeQty < 0 || !Number.isFinite(afterQty) || afterQty < qty) return null;
+  if (!Number.isFinite(beforeCost) || beforeCost < 0 || !Number.isFinite(afterCost) || afterCost <= 0) return null;
+  if (!Number.isFinite(positionPriceAtBuy) || positionPriceAtBuy <= 0 || !tradedAt || !createdAt) return null;
+  const reversedAt = item?.status === 'reversed' ? normalizeIsoDateTime(item?.reversedAt) : '';
+  return {
+    id: String(item?.id || `${symbol}-${createdAt}`).slice(0, 100),
+    type: 'buy',
+    status: item?.status === 'reversed' ? 'reversed' : 'active',
+    broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    account: String(item?.account || '未命名账户').trim().slice(0, 80),
+    market: sanitizeEnum(item?.market, ['US', 'HK'], symbol.endsWith('.HK') ? 'HK' : 'US'),
+    holdingType: sanitizeEnum(item?.holdingType, ['个股', 'ETF', '杠杆ETF'], '个股'),
+    name: String(item?.name || symbol).trim().slice(0, 80),
+    symbol,
+    currency: sanitizeEnum(item?.currency, ['USD', 'HKD'], symbol.endsWith('.US') ? 'USD' : 'HKD'),
+    qty,
+    price,
+    fees,
+    totalCost,
+    beforeQty,
+    afterQty,
+    beforeCost,
+    afterCost,
+    positionPriceAtBuy,
+    tradedAt,
+    note: String(item?.note || '').trim().slice(0, 240),
+    createdAt,
+    ...(reversedAt ? { reversedAt } : {}),
+    ...(item?.status === 'reversed' ? {
+      reversalEffect: item?.reversalEffect === 'position-adjusted' ? 'position-adjusted' : 'history-only',
+    } : {}),
+  };
+}
+
+function normalizeImportLog(item) {
+  const savedAt = normalizeIsoDateTime(item?.savedAt);
+  if (!savedAt) return null;
+  return {
+    id: String(item?.id || `import-${savedAt}`).slice(0, 100),
+    source: item?.source === 'manual' ? 'manual' : 'ocr',
+    savedAt,
+    summary: String(item?.summary || '').trim().slice(0, 160),
+    holdingCount: Math.max(0, Math.floor(Number(item?.holdingCount) || 0)),
+    accountCount: Math.max(0, Math.floor(Number(item?.accountCount) || 0)),
+    accounts: Array.isArray(item?.accounts) ? item.accounts.map((account) => String(account).trim().slice(0, 120)).filter(Boolean).slice(0, 20) : [],
+    warningCount: Math.max(0, Math.floor(Number(item?.warningCount) || 0)),
   };
 }
 

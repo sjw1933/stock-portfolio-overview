@@ -1,4 +1,4 @@
-import type { AccountSnapshot, Holding, SavedSnapshot, SellRecord, SnapshotDraft } from '../types';
+import type { AccountSnapshot, BuyRecord, Holding, ImportAuditRecord, SavedSnapshot, SellRecord, SnapshotDraft } from '../types';
 
 export const savedSnapshotKey = 'gup-saved-snapshot-v1';
 
@@ -66,7 +66,7 @@ export function saveSnapshotFromDraft(
   for (const key of touchedAccounts) accountPositionsUpdatedAt[key] = now;
   const saved: SavedSnapshot = {
     revision: previousSnapshot?.revision ?? 0,
-    source: 'ocr',
+    source: draft.source === 'manual' ? 'manual' : 'ocr',
     savedAt: now,
     positionsUpdatedAt: now,
     accountPositionsUpdatedAt,
@@ -74,7 +74,9 @@ export function saveSnapshotFromDraft(
     warnings: draft.warnings || [],
     holdings: nextHoldings,
     accountSnapshots: nextAccounts,
+    buyRecords: previousSnapshot?.buyRecords ?? [],
     sellRecords: previousSnapshot?.sellRecords ?? [],
+    importLogs: [createImportLog(draft, now), ...(previousSnapshot?.importLogs ?? [])].slice(0, 80),
   };
   return saved;
 }
@@ -171,6 +173,25 @@ function normalizeClientSnapshot(snapshot: SavedSnapshot): SavedSnapshot {
     accountPositionsUpdatedAt,
     holdings: Array.isArray(snapshot.holdings) ? snapshot.holdings : [],
     accountSnapshots: Array.isArray(snapshot.accountSnapshots) ? snapshot.accountSnapshots : [],
+    buyRecords: Array.isArray(snapshot.buyRecords) ? snapshot.buyRecords as BuyRecord[] : [],
     sellRecords: Array.isArray(snapshot.sellRecords) ? snapshot.sellRecords as SellRecord[] : [],
+    importLogs: Array.isArray(snapshot.importLogs) ? snapshot.importLogs as ImportAuditRecord[] : [],
+  };
+}
+
+function createImportLog(draft: SnapshotDraft, savedAt: string): ImportAuditRecord {
+  const accounts = new Set([
+    ...draft.holdings.map((item) => `${item.broker} · ${item.account}`),
+    ...draft.accountSnapshots.map((item) => `${item.broker} · ${item.account}`),
+  ]);
+  return {
+    id: globalThis.crypto?.randomUUID?.() ?? `import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    source: draft.source === 'manual' ? 'manual' : 'ocr',
+    savedAt,
+    summary: draft.summary.trim().slice(0, 160),
+    holdingCount: draft.holdings.length,
+    accountCount: draft.accountSnapshots.length,
+    accounts: Array.from(accounts).slice(0, 20),
+    warningCount: draft.warnings.length,
   };
 }

@@ -1983,6 +1983,11 @@ button {
   }
 }
 
+.chart-sale-markers .buy-marker-row span {
+  background: #dcfce7;
+  color: #087944;
+}
+
 @media (min-width: 680px) {
   .app {
     padding-inline: 20px;
@@ -2209,5 +2214,268 @@ button {
     border: 1px solid #dfe5ee;
     border-radius: 8px;
     box-shadow: 0 10px 28px rgb(15 23 42 / 8%);
+  }
+}
+
+.metric small {
+  display: block;
+  margin-top: 4px;
+  color: rgb(255 255 255 / 70%);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.holding-record-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.import-mode-tabs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.account-row {
+  grid-template-columns: minmax(90px, 1fr) 70px 100px minmax(132px, auto);
+}
+
+.trade-entry-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(58px, 1fr));
+  gap: 6px;
+}
+
+.buy-entry-button,
+.new-buy-button,
+.buy-revoke-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #9fe0c8;
+  border-radius: 8px;
+  background: #f0fdf7;
+  color: #087944;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.new-buy-button {
+  min-height: 42px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.sell-form-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  padding: 0 10px;
+  font-size: 15px;
+}
+
+.buy-account-block {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #d9e7f7;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.buy-account-block > label {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.buy-account-block > label select {
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 10px;
+}
+
+.buy-confirm-icon {
+  background: #dcfce7;
+  color: #087944;
+}
+
+.buy-primary-action {
+  background: #087944;
+}
+
+.buy-estimate {
+  border-color: #b7ead7;
+  background: #f0fdf7;
+}
+
+.lookup-ok,
+.record-reversal-note {
+  margin: 8px 0 0;
+  color: #087944;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.record-reversal-note {
+  color: #64748b;
+}
+
+.manual-import-note {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.manual-account-list,
+.manual-holding-list,
+.import-audit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.manual-account-group {
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.manual-account-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.manual-account-head b,
+.manual-account-head span {
+  display: block;
+}
+
+.manual-account-head span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.danger-icon {
+  width: 36px;
+  height: 36px;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.manual-holding-list {
+  margin-top: 12px;
+}
+
+.manual-holding-row {
+  padding: 11px;
+  border: 1px solid #edf1f6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.add-row-button,
+.manual-add-account {
+  width: 100%;
+}
+
+.manual-add-account {
+  margin-top: 10px;
+}
+
+.manual-change-preview {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f5f9ff;
+}
+
+.manual-change-preview > b {
+  color: #1769e8;
+  font-size: 13px;
+}
+
+.manual-change-preview p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.manual-change-preview span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #64748b;
+}
+
+.manual-change-preview strong {
+  flex: 0 0 auto;
+  color: #111827;
+}
+
+.import-audit-list article {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border-top: 1px solid #edf1f6;
+}
+
+.import-audit-list article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.import-audit-list span,
+.import-audit-list p,
+.import-audit-list em {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.import-audit-list em {
+  color: #9a5b00;
+}
+
+@media (max-width: 390px) {
+  .account-row {
+    grid-template-columns: minmax(80px, 1fr) 58px 72px;
+  }
+
+  .trade-entry-actions {
+    grid-column: 1 / -1;
+  }
+
+  .manual-account-fields,
+  .manual-holding-row .draft-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-change-preview p {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 }

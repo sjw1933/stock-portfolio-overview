@@ -7,12 +7,15 @@ type YahooQuote = {
   regularMarketPreviousClose?: number;
   postMarketPrice?: number;
   preMarketPrice?: number;
+  longName?: string;
+  shortName?: string;
 };
 
-type QuoteSnapshot = {
+export type QuoteSnapshot = {
   price: number;
   change?: number;
   previousClose?: number;
+  name?: string;
 };
 
 export async function fetchLatestQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
@@ -53,6 +56,7 @@ function parseTencentQuotes(text: string, holdings: Holding[]): Map<string, Quot
     if (Number.isFinite(price) && price > 0) {
       quotes.set(holding.symbol, {
         price,
+        name: fields[1] || undefined,
         change: Number.isFinite(change) ? change : undefined,
         previousClose: Number.isFinite(previousClose) && previousClose > 0 ? previousClose : undefined,
       });
@@ -81,6 +85,7 @@ async function fetchYahooQuotes(holdings: Holding[], signal?: AbortSignal): Prom
     if (typeof price === 'number' && Number.isFinite(price)) {
       quotes.set(localSymbol, {
         price,
+        name: item?.longName || item?.shortName,
         change: item?.regularMarketChange,
         previousClose: item?.regularMarketPreviousClose,
       });
@@ -92,6 +97,37 @@ async function fetchYahooQuotes(holdings: Holding[], signal?: AbortSignal): Prom
   }
 
   return quotes;
+}
+
+export async function fetchSecurityQuote(symbol: string, market: Holding['market'], signal?: AbortSignal): Promise<QuoteSnapshot> {
+  const normalized = normalizeSecuritySymbol(symbol, market);
+  const currency = market === 'HK' ? 'HKD' : 'USD';
+  const holding: Holding = {
+    broker: '盈立证券',
+    account: '行情查询',
+    market,
+    type: '个股',
+    name: normalized,
+    symbol: normalized,
+    currency,
+    qty: 1,
+    price: 1,
+    cost: 1,
+    todayPnl: 0,
+    totalPnl: 0,
+  };
+  const quotes = await fetchLatestQuotes([holding], signal);
+  const quote = quotes.get(normalized);
+  if (!quote) throw new Error('暂未查询到该股票行情');
+  return quote;
+}
+
+export function normalizeSecuritySymbol(symbol: string, market: Holding['market']) {
+  const raw = symbol.trim().toUpperCase();
+  if (!raw) return '';
+  if (/\.(US|HK)$/.test(raw)) return raw;
+  if (market === 'HK' && /^\d{1,5}$/.test(raw)) return `${raw.padStart(5, '0')}.HK`;
+  return `${raw}.US`;
 }
 
 function tencentQuoteSymbols(symbol: string) {

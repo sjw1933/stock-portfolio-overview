@@ -16,7 +16,7 @@ import {
 } from 'recharts';
 import { PanelTitle } from '../components/PanelTitle';
 import type { AppContext } from '../appContext';
-import type { SellRecord } from '../types';
+import type { BuyRecord, SellRecord } from '../types';
 import { supportsMarketHistory, fetchMarketHistory, type TrendPeriod, type TrendPoint, type TrendSeries } from '../utils/marketHistory';
 
 const periods: Array<{ key: TrendPeriod; label: string }> = [
@@ -45,8 +45,23 @@ export function TrendsPage({ context }: { context: AppContext }) {
         });
       }
     }
+    for (const record of context.buyRecords) {
+      if (!map.has(record.symbol)) {
+        map.set(record.symbol, {
+          ...record,
+          type: record.holdingType,
+          qty: 0,
+          price: record.positionPriceAtBuy,
+          cost: record.afterCost,
+          todayPnl: 0,
+          totalPnl: 0,
+          rows: [],
+          marketValue: 0,
+        });
+      }
+    }
     return Array.from(map.values());
-  }, [context.aggregated, context.sellRecords]);
+  }, [context.aggregated, context.buyRecords, context.sellRecords]);
   const defaultSymbol = trendHoldings.find((holding) => supportsMarketHistory(holding.symbol))?.symbol ?? trendHoldings[0]?.symbol ?? '';
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [period, setPeriod] = useState<TrendPeriod>('minute');
@@ -133,6 +148,7 @@ export function TrendsPage({ context }: { context: AppContext }) {
             series={series}
             name={selectedHolding?.name ?? series.symbol}
             cost={selectedHolding?.qty ? selectedHolding.cost : undefined}
+            buyRecords={context.buyRecords.filter((record) => record.symbol === series.symbol && record.status === 'active')}
             sellRecords={context.sellRecords.filter((record) => record.symbol === series.symbol && record.status === 'active')}
           />
         ) : (
@@ -149,7 +165,7 @@ export function TrendsPage({ context }: { context: AppContext }) {
         <div className="market-notes">
           <p>港股和美股支持分时、5日、日K、周K、月K；美股 5 日当前按最近 5 个交易日展示。</p>
           <p>如果新导入的美股代码在数据源没有历史行情，会显示数据源返回的错误，而不是需要手工接入。</p>
-          <p>蓝色虚线为当前持仓加权成本价；红色“卖”标记来自手工确认的有效卖出记录。</p>
+          <p>蓝色虚线为当前持仓加权成本价；绿色“买”和红色“卖”标记来自手工确认的有效交易记录。</p>
           <p>成交量按分钟或周期展示，RSI 使用 6、12、24 三组参数在前端计算。</p>
         </div>
       </section>
@@ -161,12 +177,13 @@ function isMinuteCapable(symbol: string) {
   return symbol.endsWith('.HK') || symbol.endsWith('.US');
 }
 
-function MarketChart({ series, name, cost, sellRecords }: { series: TrendSeries; name: string; cost?: number; sellRecords: SellRecord[] }) {
+function MarketChart({ series, name, cost, buyRecords, sellRecords }: { series: TrendSeries; name: string; cost?: number; buyRecords: BuyRecord[]; sellRecords: SellRecord[] }) {
   const latest = series.points[series.points.length - 1];
   const priceColor = series.change >= 0 ? '#10a77a' : '#ef476f';
   const changePrefix = series.change >= 0 ? '+' : '';
   const volumeMax = Math.max(...series.points.map((point) => point.volume));
   const costPrice = Number.isFinite(cost) && cost && cost > 0 ? cost : undefined;
+  const buyMarkers = buildTradeMarkers(series, buyRecords);
   const saleMarkers = buildSaleMarkers(series, sellRecords);
 
   return (
@@ -214,6 +231,19 @@ function MarketChart({ series, name, cost, sellRecords }: { series: TrendSeries;
               label={{ value: `买入成本 ${costPrice.toFixed(2)}`, position: 'insideTopRight', fill: '#2563eb', fontSize: 12, fontWeight: 800 }}
             />
           )}
+          {buyMarkers.map((marker) => (
+            <ReferenceDot
+              key={marker.record.id}
+              yAxisId="price"
+              x={marker.point.label}
+              y={marker.record.price}
+              r={5}
+              fill="#10a77a"
+              stroke="#ffffff"
+              strokeWidth={2}
+              label={{ value: '买', position: 'bottom', fill: '#087944', fontSize: 12, fontWeight: 900 }}
+            />
+          ))}
           {saleMarkers.map((marker) => (
             <ReferenceDot
               key={marker.record.id}
@@ -230,8 +260,15 @@ function MarketChart({ series, name, cost, sellRecords }: { series: TrendSeries;
         </ComposedChart>
       </ResponsiveContainer>
 
-      {saleMarkers.length > 0 && (
+      {buyMarkers.length + saleMarkers.length > 0 && (
         <div className="chart-sale-markers">
+          {buyMarkers.map(({ record }) => (
+            <div key={record.id} className="buy-marker-row">
+              <span>买</span>
+              <b>{new Date(record.tradedAt).toLocaleDateString('zh-CN')} · {record.price.toFixed(3)} {record.currency}</b>
+              <em>{record.qty.toLocaleString('zh-CN', { maximumFractionDigits: 6 })} 股 · 总成本 {record.totalCost.toFixed(2)}</em>
+            </div>
+          ))}
           {saleMarkers.map(({ record }) => (
             <div key={record.id}>
               <span>卖</span>
@@ -282,6 +319,15 @@ function MarketChart({ series, name, cost, sellRecords }: { series: TrendSeries;
 }
 
 function buildSaleMarkers(series: TrendSeries, records: SellRecord[]) {
+  return records.flatMap((record) => {
+    const tradeDate = record.tradedAt.slice(0, 10);
+    const exact = series.points.filter((point) => point.date === tradeDate);
+    const point = exact[exact.length - 1] ?? nearestDatedPoint(series.points, tradeDate);
+    return point ? [{ point, record }] : [];
+  });
+}
+
+function buildTradeMarkers(series: TrendSeries, records: BuyRecord[]) {
   return records.flatMap((record) => {
     const tradeDate = record.tradedAt.slice(0, 10);
     const exact = series.points.filter((point) => point.date === tradeDate);

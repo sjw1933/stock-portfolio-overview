@@ -1,6 +1,6 @@
 # 股票持仓总览部署说明
 
-这是一个 Vite + React 静态前端项目，默认使用合成演示快照，并通过 `/api/quotes` 获取 10 秒刷新行情。持仓相关新闻、AI 问询和截图 OCR 由 `/api/holding-news`、`/api/risk-analysis`、`/api/ocr-snapshot` 提供。
+这是一个 Vite + React 静态前端项目，默认使用合成演示快照，并通过 `/api/quotes` 获取 10 秒刷新行情。持仓相关新闻、AI 问询和截图 OCR 由 `/api/holding-news`、`/api/risk-analysis`、`/api/ocr-snapshot` 提供；手动持仓与买卖流水保存在共享快照中。
 
 ## 本地构建
 
@@ -119,4 +119,4 @@ volumes:
 - 如果不在页面配置 AI API，后端会继续使用服务器环境变量里的 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`。
 - 行情源为公开接口，适合个人监控，不等同券商交易报价。
 - 趋势页已接入港股分时和美股 Nasdaq 日/周/月历史行情；未覆盖标的会显示待接入。
-- 下单、对账、最终资产确认仍以券商 App 为准。
+- 页面登记的是已成交买卖记录，不是券商下单接口；对账和最终资产确认仍以券商 App 为准。

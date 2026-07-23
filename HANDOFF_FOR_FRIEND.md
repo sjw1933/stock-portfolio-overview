@@ -1,6 +1,6 @@
 # 股票持仓总览（Stock Portfolio Overview）交接文档
 
-这是一套个人股票持仓监控 Web 看板，面向美股和港股持仓管理。当前版本是 MVP 前端骨架 + 轻量 Node 后端，主要能力包括账户总览、持仓列表、趋势查看、截图 OCR 导入、持仓相关新闻和 AI 问询。
+这是一套个人股票持仓监控 Web 看板，面向美股和港股持仓管理。当前版本是 MVP 前端骨架 + 轻量 Node 后端，主要能力包括账户总览、持仓列表、趋势查看、截图 OCR、手动持仓录入、买卖登记、持仓相关新闻和 AI 问询。
 
 本文档用于接手修改代码。仓库已做脱敏处理，默认数据均为合成演示数据，不包含真实账号、密码、API Key、域名、服务器 IP 或真实持仓。
 
@@ -48,13 +48,15 @@ src/pages/OverviewPage.tsx     总览页
 src/pages/HoldingsPage.tsx     持仓页
 src/pages/TrendsPage.tsx       趋势页
 src/pages/AskPage.tsx          AI 问询页
-src/pages/ImportPage.tsx       OCR 导入页
+src/pages/ImportPage.tsx       OCR、手动持仓录入和导入审计
 src/components/                页面组件
 src/utils/portfolio.ts         汇总、市值、盈亏计算
 src/utils/quotes.ts            实时行情刷新
 src/utils/marketHistory.ts     单标的趋势行情
 src/utils/ocrSnapshot.ts       前端 OCR API 调用
 src/utils/snapshotStorage.ts   本地/共享快照存取与增量合并
+src/utils/buyTransactions.ts   买入、加权成本和安全撤销
+src/utils/sellTransactions.ts  卖出、已实现盈亏和撤销
 src/utils/holdingNews.ts       持仓相关新闻 API 调用
 src/utils/askAnalysis.ts       AI 问询 API 调用
 src/utils/aiConfig.ts          浏览器端 AI API 配置保存
@@ -76,6 +78,11 @@ README_DEPLOY.md               部署说明
 - 总览层按标的合并，明细层按账户拆开
 - OCR 截图导入，识别后逐行人工确认
 - OCR 按账户维度增量更新，不会自动清空截图里没出现的账户
+- 手动持仓按账户增量更新，数量按当前总持仓覆盖
+- 买入登记、加权平均成本、买入记录和安全撤销
+- 卖出登记、已实现盈亏、卖出记录和撤销
+- 趋势图显示有效买入点和卖出点
+- OCR 与手动持仓更新都有精简导入审计记录
 - 服务端共享快照，多个浏览器读取同一份最新数据
 - AI API Key 可在页面里配置，配置保存在当前浏览器 localStorage
 - 持仓相关新闻从 Investing 相关来源抓取/匹配
@@ -109,7 +116,7 @@ src/data/mockPortfolio.ts
 
 正式使用时，可以保留演示数据，也可以改成空数据或客户自己的初始化数据。
 
-### OCR 导入数据
+### OCR 与手动持仓数据
 
 导入流程：
 
@@ -120,6 +127,14 @@ src/data/mockPortfolio.ts
 5. 用户逐行确认
 6. 前端调用 `/api/snapshot` 保存共享快照
 7. 后续所有浏览器优先读取共享快照
+
+手动持仓使用同一套匹配键和增量合并逻辑。手动数量代表当前总持仓，不是新增数量；新增成交必须走“登记买入”。
+
+### 买入和卖出流水
+
+买入记录保存在 `buyRecords`，卖出记录保存在 `sellRecords`。买入按原持仓成本、成交金额和费用计算加权平均成本。后续导入券商快照时，券商数量和成本成为当前真值，历史交易记录不会再次叠加。
+
+如果一笔买入之后已经存在新快照或同标的交易，撤销只改变该记录状态，不自动回退当前持仓，避免破坏最新券商数据。
 
 增量合并规则在：
 

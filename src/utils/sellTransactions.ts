@@ -126,7 +126,7 @@ function createId() {
 }
 
 function roundQuantity(value: number) {
-  return Math.round(Number(value) * 10000) / 10000;
+  return Math.round(Number(value) * 1000000) / 1000000;
 }
 
 function normalizeTradeTime(value: string) {
@@ -137,5 +137,5 @@ function normalizeTradeTime(value: string) {
 }
 
 function formatQty(value: number) {
-  return value.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
+  return value.toLocaleString('zh-CN', { maximumFractionDigits: 6 });
 }

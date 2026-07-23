@@ -63,6 +63,49 @@ export type SellInput = {
   note: string;
 };
 
+export type BuyRecord = {
+  id: string;
+  type: 'buy';
+  status: 'active' | 'reversed';
+  broker: Broker;
+  account: string;
+  market: Holding['market'];
+  holdingType: Holding['type'];
+  name: string;
+  symbol: string;
+  currency: Holding['currency'];
+  qty: number;
+  price: number;
+  fees: number;
+  totalCost: number;
+  beforeQty: number;
+  afterQty: number;
+  beforeCost: number;
+  afterCost: number;
+  positionPriceAtBuy: number;
+  tradedAt: string;
+  note: string;
+  createdAt: string;
+  reversedAt?: string;
+  reversalEffect?: 'position-adjusted' | 'history-only';
+};
+
+export type BuyInput = {
+  broker: Broker;
+  account: string;
+  market: Holding['market'];
+  holdingType: Holding['type'];
+  name: string;
+  symbol: string;
+  currency: Holding['currency'];
+  qty: number;
+  price: number;
+  fees: number;
+  currentPrice: number;
+  tradedAt: string;
+  note: string;
+};
+
 export type SnapshotDraftHolding = Omit<Holding, 'todayPnl' | 'totalPnl'> & {
   sourceImage?: string;
   warnings?: string[];
@@ -84,7 +127,7 @@ export type SnapshotDraft = {
 
 export type SavedSnapshot = {
   revision: number;
-  source: 'ocr' | 'default';
+  source: 'ocr' | 'manual' | 'default';
   savedAt: string;
   positionsUpdatedAt: string;
   accountPositionsUpdatedAt: Record<string, string>;
@@ -92,7 +135,20 @@ export type SavedSnapshot = {
   warnings: string[];
   holdings: Holding[];
   accountSnapshots: AccountSnapshot[];
+  buyRecords: BuyRecord[];
   sellRecords: SellRecord[];
+  importLogs: ImportAuditRecord[];
+};
+
+export type ImportAuditRecord = {
+  id: string;
+  source: 'ocr' | 'manual';
+  savedAt: string;
+  summary: string;
+  holdingCount: number;
+  accountCount: number;
+  accounts: string[];
+  warningCount: number;
 };
 
 export type AccountSnapshot = {
@@ -164,7 +220,10 @@ export type PortfolioSummary = {
   realizedPnl: number;
   todayRealizedPnl: number;
   totalReturn: number;
+  buyFees: number;
   sellFees: number;
+  cashComplete: boolean;
+  missingNetAssetAccounts: number;
 };
 
 export type QuoteStatus = 'idle' | 'refreshing' | 'live' | 'fallback' | 'error';

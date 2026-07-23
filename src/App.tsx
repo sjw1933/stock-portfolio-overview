@@ -8,7 +8,7 @@ import { HoldingsPage } from './pages/HoldingsPage';
 import { TrendsPage } from './pages/TrendsPage';
 import { ImportPage } from './pages/ImportPage';
 import { AskPage } from './pages/AskPage';
-import type { Currency, Holding, HoldingNewsStatus, QuoteStatus, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
+import type { BuyInput, Currency, Holding, HoldingNewsStatus, QuoteStatus, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
 import { aggregateHoldings, buildSummary } from './utils/portfolio';
 import { applyQuotes, fetchLatestQuotes } from './utils/quotes';
 import { AlertTriangle, BrainCircuit } from 'lucide-react';
@@ -17,6 +17,7 @@ import { fetchHoldingNews } from './utils/holdingNews';
 import { clearSavedSnapshot, clearSharedSnapshot, fetchSharedSnapshot, pushSharedSnapshot, readSavedSnapshot, saveSnapshotFromDraft } from './utils/snapshotStorage';
 import { aiConfigPayload, readAiConfig, saveAiConfig } from './utils/aiConfig';
 import { applySell, reverseSell } from './utils/sellTransactions';
+import { applyBuy, reverseBuy } from './utils/buyTransactions';
 
 const dailyRiskAnalysisLimit = 3;
 const riskAnalysisCacheKey = 'gup-risk-analysis-cache-v2';
@@ -166,9 +167,35 @@ export function App() {
     applySavedSnapshot(shared);
     setConfirmedRows({});
     setUploaded(false);
-    setLastRefresh('OCR 快照价');
+    setLastRefresh(draft.source === 'manual' ? '手动持仓价' : 'OCR 快照价');
     setQuoteStatus('idle');
   }, [accountSnapshotsState, applySavedSnapshot, holdings, savedSnapshot]);
+
+  const registerBuy = useCallback(async (input: BuyInput) => {
+    const remote = await fetchSharedSnapshot();
+    const previous = remote ?? savedSnapshot;
+    if (!previous) throw new Error('共享持仓尚未准备好，请刷新页面后重试');
+    if (savedSnapshot && previous.revision !== savedSnapshot.revision) {
+      applySavedSnapshot(previous);
+      throw new Error('持仓已在其他设备更新，页面已刷新，请重新确认买入');
+    }
+    const next = applyBuy(previous, input);
+    const shared = await pushSharedSnapshot(next, previous.revision);
+    applySavedSnapshot(shared);
+  }, [applySavedSnapshot, savedSnapshot]);
+
+  const revokeBuy = useCallback(async (recordId: string) => {
+    const remote = await fetchSharedSnapshot();
+    const previous = remote ?? savedSnapshot;
+    if (!previous) throw new Error('共享持仓尚未准备好，请刷新页面后重试');
+    if (savedSnapshot && previous.revision !== savedSnapshot.revision) {
+      applySavedSnapshot(previous);
+      throw new Error('持仓已在其他设备更新，页面已刷新，请重新操作');
+    }
+    const next = reverseBuy(previous, recordId);
+    const shared = await pushSharedSnapshot(next, previous.revision);
+    applySavedSnapshot(shared);
+  }, [applySavedSnapshot, savedSnapshot]);
 
   const registerSell = useCallback(async (holding: Holding, input: SellInput) => {
     const remote = await fetchSharedSnapshot();
@@ -262,10 +289,11 @@ export function App() {
       accountSnapshotsState,
       baseHoldings,
       savedSnapshot?.sellRecords ?? [],
+      savedSnapshot?.buyRecords ?? [],
       savedSnapshot?.positionsUpdatedAt ?? '',
       savedSnapshot?.accountPositionsUpdatedAt ?? {},
     ),
-    [currency, holdings, accountSnapshotsState, baseHoldings, savedSnapshot?.sellRecords, savedSnapshot?.positionsUpdatedAt, savedSnapshot?.accountPositionsUpdatedAt],
+    [currency, holdings, accountSnapshotsState, baseHoldings, savedSnapshot?.sellRecords, savedSnapshot?.buyRecords, savedSnapshot?.positionsUpdatedAt, savedSnapshot?.accountPositionsUpdatedAt],
   );
   const aggregated = useMemo(() => aggregateHoldings(holdings, currency), [currency, holdings]);
 
@@ -369,8 +397,12 @@ export function App() {
     holdings,
     accountSnapshots: accountSnapshotsState,
     savedSnapshot,
+    buyRecords: savedSnapshot?.buyRecords ?? [],
     sellRecords: savedSnapshot?.sellRecords ?? [],
+    importLogs: savedSnapshot?.importLogs ?? [],
     saveDraftSnapshot,
+    registerBuy,
+    revokeBuy,
     registerSell,
     revokeSell,
     resetSnapshot,
@@ -426,6 +458,8 @@ function createDefaultSnapshot(holdings: Holding[], accounts: typeof accountSnap
     warnings: [],
     holdings,
     accountSnapshots: accounts,
+    buyRecords: [],
     sellRecords: [],
+    importLogs: [],
   };
 }
