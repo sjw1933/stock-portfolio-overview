@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, RefreshCw, Send, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import type { AppContext } from '../appContext';
 import type { AggregatedHolding, Currency, Holding, PortfolioSummary } from '../types';
@@ -22,9 +22,12 @@ export function AskPage({ context }: { context: AppContext }) {
   const dataProfile = useMemo(() => buildDataProfile(context), [context]);
   const suggestedPrompts = useMemo(() => buildSuggestedPrompts(dataProfile), [dataProfile]);
   const [messages, setMessages] = useState<ChatMessage[]>(() => readSavedMessages(dataProfile));
+  const chatWindowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     saveMessages(messages);
+    const chatWindow = chatWindowRef.current;
+    if (chatWindow) chatWindow.scrollTop = chatWindow.scrollHeight;
   }, [messages]);
 
   async function sendQuestion(question: string) {
@@ -40,8 +43,8 @@ export function AskPage({ context }: { context: AppContext }) {
       {
         id: pendingId,
         role: 'assistant',
-        text: '正在调用 AI 接口读取你的当前持仓数据。',
-        meta: 'API 请求中',
+        text: '正在分析当前持仓和市场数据，通常需要 10-45 秒。',
+        meta: 'AI 分析中',
       },
     ]);
     setDraft('');
@@ -134,7 +137,7 @@ export function AskPage({ context }: { context: AppContext }) {
           ))}
         </div>
 
-        <div className="chat-window" aria-live="polite">
+        <div className="chat-window" aria-live="polite" ref={chatWindowRef}>
           {messages.map((message) => (
             <article className={`chat-message ${message.role}`} key={message.id}>
               <div className="chat-avatar" aria-hidden="true">
@@ -180,6 +183,9 @@ function readSavedMessages(profile: DataProfile): ChatMessage[] {
     if (Array.isArray(saved) && saved.length) {
       return saved
         .filter((message) => (message.role === 'assistant' || message.role === 'user') && typeof message.text === 'string')
+        .map((message) => isPendingMessage(message)
+          ? { ...message, text: '上一次请求因页面刷新中断，请重新发送问题。', meta: '请求已中断' }
+          : message)
         .slice(-maxSavedMessages);
     }
   } catch {
@@ -194,6 +200,14 @@ function readSavedMessages(profile: DataProfile): ChatMessage[] {
       meta: '基于当前看板快照',
     },
   ];
+}
+
+function isPendingMessage(message: ChatMessage) {
+  return message.role === 'assistant'
+    && (message.meta === 'API 请求中'
+      || message.meta === 'AI 分析中'
+      || message.text.startsWith('正在调用 AI 接口')
+      || message.text.startsWith('正在分析当前持仓'));
 }
 
 function saveMessages(messages: ChatMessage[]) {
