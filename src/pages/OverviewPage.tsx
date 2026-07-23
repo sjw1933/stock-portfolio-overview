@@ -1,6 +1,7 @@
 import { HoldingList } from '../components/HoldingList';
 import { HoldingNewsBoard } from '../components/HoldingNewsBoard';
 import { StructurePanel } from '../components/StructurePanel';
+import { FearGreedPanel } from '../components/FearGreedPanel';
 import type { AppContext } from '../appContext';
 
 export function OverviewPage({ context, sidebar = false }: { context: AppContext; sidebar?: boolean }) {
@@ -18,6 +19,7 @@ export function OverviewPage({ context, sidebar = false }: { context: AppContext
         onAiEnabledChange={context.setNewsAiEnabled}
       />
       <StructurePanel context={context} />
+      {sidebar && context.tab === 'holdings' && <FearGreedPanel />}
       {!sidebar && <HoldingList context={context} />}
     </div>
   );

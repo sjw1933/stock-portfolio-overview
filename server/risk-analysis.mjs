@@ -15,6 +15,9 @@ const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 const requestTimeoutMs = Number(process.env.RISK_LLM_TIMEOUT_MS || 45000);
 const ocrTimeoutMs = Number(process.env.OCR_LLM_TIMEOUT_MS || 90000);
 const snapshotFile = process.env.SNAPSHOT_FILE || '/app/data/snapshot.json';
+const fearGreedCacheFile = process.env.FEAR_GREED_CACHE_FILE || `${dirname(snapshotFile)}/fear-greed-cache.json`;
+const fearGreedCacheTtlMs = Number(process.env.FEAR_GREED_CACHE_TTL_MS || 15 * 60 * 1000);
+const fearGreedUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata';
 const supportedBrokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'];
 const supportedBrokerText = supportedBrokers.join('、');
 const supportedBrokerJsonText = supportedBrokers.join('|');
@@ -333,6 +336,124 @@ function readMarketHistoryQuery(req) {
   const symbol = String(url.searchParams.get('symbol') || '').toUpperCase();
   const period = String(url.searchParams.get('period') || 'day');
   return { symbol, period };
+}
+
+let fearGreedMemoryCache = null;
+let fearGreedRefreshPromise = null;
+
+async function getFearGreed(forceRefresh = false) {
+  const cached = await readFearGreedCache();
+  const cacheAge = cached ? Date.now() - new Date(cached.fetchedAt).getTime() : Number.POSITIVE_INFINITY;
+  if (!forceRefresh && cached && cacheAge < fearGreedCacheTtlMs) {
+    return { ...cached, cacheStatus: 'live' };
+  }
+
+  try {
+    const fresh = await refreshFearGreed();
+    return { ...fresh, cacheStatus: 'live' };
+  } catch (error) {
+    if (cached) return { ...cached, cacheStatus: 'cached' };
+    throw error;
+  }
+}
+
+async function refreshFearGreed() {
+  if (fearGreedRefreshPromise) return fearGreedRefreshPromise;
+  fearGreedRefreshPromise = fetchFearGreedFromCnn()
+    .then(async (data) => {
+      fearGreedMemoryCache = data;
+      await writeFearGreedCache(data);
+      return data;
+    })
+    .finally(() => {
+      fearGreedRefreshPromise = null;
+    });
+  return fearGreedRefreshPromise;
+}
+
+async function fetchFearGreedFromCnn() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(fearGreedUrl, {
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        origin: 'https://www.cnn.com',
+        referer: 'https://www.cnn.com/markets/fear-and-greed',
+        'sec-fetch-site': 'same-site',
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+      },
+    });
+    if (!response.ok) throw new Error(`CNN Fear & Greed HTTP ${response.status}`);
+    return normalizeFearGreedResponse(await response.json());
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeFearGreedResponse(payload) {
+  const current = payload?.fear_and_greed;
+  const timestamp = normalizeIsoDateTime(current?.timestamp);
+  if (!timestamp) throw new Error('CNN Fear & Greed timestamp is invalid');
+  return {
+    score: normalizeFearGreedScore(current?.score),
+    rating: normalizeFearGreedRating(current?.rating),
+    timestamp,
+    previousClose: normalizeFearGreedScore(current?.previous_close),
+    previousWeek: normalizeFearGreedScore(current?.previous_1_week),
+    previousMonth: normalizeFearGreedScore(current?.previous_1_month),
+    previousYear: normalizeFearGreedScore(current?.previous_1_year),
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeFearGreedCache(payload) {
+  const timestamp = normalizeIsoDateTime(payload?.timestamp);
+  const fetchedAt = normalizeIsoDateTime(payload?.fetchedAt);
+  if (!timestamp || !fetchedAt) throw new Error('Fear & Greed cache timestamp is invalid');
+  return {
+    score: normalizeFearGreedScore(payload?.score),
+    rating: normalizeFearGreedRating(payload?.rating),
+    timestamp,
+    previousClose: normalizeFearGreedScore(payload?.previousClose),
+    previousWeek: normalizeFearGreedScore(payload?.previousWeek),
+    previousMonth: normalizeFearGreedScore(payload?.previousMonth),
+    previousYear: normalizeFearGreedScore(payload?.previousYear),
+    fetchedAt,
+  };
+}
+
+function normalizeFearGreedScore(value) {
+  const score = Number(value);
+  if (!Number.isFinite(score)) throw new Error('CNN Fear & Greed score is invalid');
+  return Math.min(100, Math.max(0, score));
+}
+
+function normalizeFearGreedRating(value) {
+  const rating = String(value || '').trim().toLowerCase();
+  if (['extreme fear', 'fear', 'neutral', 'greed', 'extreme greed'].includes(rating)) return rating;
+  throw new Error('CNN Fear & Greed rating is invalid');
+}
+
+async function readFearGreedCache() {
+  if (fearGreedMemoryCache) return fearGreedMemoryCache;
+  try {
+    const cached = normalizeFearGreedCache(JSON.parse(await readFile(fearGreedCacheFile, 'utf8')));
+    fearGreedMemoryCache = cached;
+    return cached;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    console.warn(`Fear & Greed cache ignored: ${error instanceof Error ? error.message : 'invalid cache'}`);
+    return null;
+  }
+}
+
+async function writeFearGreedCache(data) {
+  await mkdir(dirname(fearGreedCacheFile), { recursive: true });
+  const tempFile = `${fearGreedCacheFile}.${process.pid}.tmp`;
+  await writeFile(tempFile, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  await rename(tempFile, fearGreedCacheFile);
 }
 
 async function fetchText(url, signal) {
@@ -1065,6 +1186,15 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return sendJson(res, 204, {});
   if (req.method === 'GET' && req.url === '/health') {
     return sendJson(res, 200, { code: 0, data: { status: 'ok', service: 'gup-risk-analysis', model: anthropicModel } });
+  }
+  if (req.method === 'GET' && req.url?.startsWith('/api/fear-greed')) {
+    try {
+      const url = new URL(req.url, 'http://localhost');
+      const data = await getFearGreed(url.searchParams.get('refresh') === '1');
+      return sendJson(res, 200, { code: 0, data });
+    } catch (error) {
+      return sendJson(res, 502, { code: 502, message: error instanceof Error ? error.message : 'fear and greed fetch failed', data: null });
+    }
   }
   if (req.method === 'GET' && req.url?.startsWith('/api/market-history')) {
     try {

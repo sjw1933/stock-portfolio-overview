@@ -894,6 +894,211 @@ button {
   border-radius: 50%;
 }
 
+.fear-greed-panel {
+  overflow: hidden;
+}
+
+.fear-greed-header,
+.fear-greed-header > div,
+.fear-greed-actions,
+.fear-greed-meta {
+  display: flex;
+  align-items: center;
+}
+
+.fear-greed-header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fear-greed-header > div:first-child {
+  min-width: 0;
+  gap: 8px;
+}
+
+.fear-greed-header h2 {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.fear-greed-header span {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fear-greed-actions {
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.fear-greed-actions button,
+.fear-greed-actions a {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+}
+
+.fear-greed-actions button:disabled {
+  color: #94a3b8;
+  cursor: wait;
+}
+
+.fear-greed-gauge {
+  width: 100%;
+  aspect-ratio: 300 / 188;
+  margin-top: 8px;
+}
+
+.fear-greed-gauge svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.gauge-tick {
+  fill: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gauge-needle {
+  stroke: #111827;
+  stroke-linecap: round;
+  stroke-width: 7;
+}
+
+.gauge-hub {
+  fill: #111827;
+}
+
+.gauge-score {
+  fill: #111827;
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.gauge-rating {
+  fill: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fear-greed-history {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid #e6ebf2;
+  border-left: 1px solid #e6ebf2;
+}
+
+.fear-greed-history > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 7px;
+  padding: 8px;
+  border-right: 1px solid #e6ebf2;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.fear-greed-history span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fear-greed-history b {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fear-greed-history em {
+  min-width: 0;
+  overflow: hidden;
+  color: #111827;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fear-tone.extreme-fear {
+  color: #c9344f;
+}
+
+.fear-tone.fear {
+  color: #d95f2d;
+}
+
+.fear-tone.neutral {
+  color: #a77700;
+}
+
+.fear-tone.greed {
+  color: #32845a;
+}
+
+.fear-tone.extreme-greed {
+  color: #087954;
+}
+
+.fear-greed-meta {
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.fear-greed-meta span {
+  color: #087954;
+}
+
+.fear-greed-meta span.cached {
+  color: #a16207;
+}
+
+.fear-greed-empty {
+  min-height: 250px;
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+
+.fear-greed-empty.error {
+  align-content: center;
+  gap: 5px;
+  color: #c51f46;
+}
+
+.fear-greed-empty.error span {
+  color: #64748b;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .table-head,
 .holding-row {
   display: grid;

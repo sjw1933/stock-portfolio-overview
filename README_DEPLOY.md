@@ -1,6 +1,6 @@
 # 股票持仓总览部署说明
 
-这是一个 Vite + React 静态前端项目，默认使用合成演示快照，并通过 `/api/quotes` 获取 10 秒刷新行情。持仓相关新闻、AI 问询和截图 OCR 由 `/api/holding-news`、`/api/risk-analysis`、`/api/ocr-snapshot` 提供；手动持仓与买卖流水保存在共享快照中。
+这是一个 Vite + React 静态前端项目，默认使用合成演示快照，并通过 `/api/quotes` 获取 10 秒刷新行情。持仓相关新闻、CNN 恐慌指数、AI 问询和截图 OCR 由 `/api/holding-news`、`/api/fear-greed`、`/api/risk-analysis`、`/api/ocr-snapshot` 提供；手动持仓与买卖流水保存在共享快照中。
 
 ## 本地构建
 
@@ -42,6 +42,10 @@ portfolio.example.com {
     }
 
     handle /api/market-history* {
+        reverse_proxy gup-risk:8791
+    }
+
+    handle /api/fear-greed* {
         reverse_proxy gup-risk:8791
     }
 
@@ -87,6 +91,8 @@ docker compose -f docker-compose.risk.yml up -d --build
 - `RISK_MODEL` / `OPENAI_MODEL`：默认模型
 - `ANTHROPIC_API_KEY`：Anthropic Key，可选
 - `SNAPSHOT_FILE`：共享快照 JSON 路径，默认 `/app/data/snapshot.json`
+- `FEAR_GREED_CACHE_FILE`：CNN 恐慌指数缓存文件，默认与共享快照位于同一数据目录
+- `FEAR_GREED_CACHE_TTL_MS`：CNN 恐慌指数缓存时长，默认 15 分钟
 
 共享快照需要持久化目录，例如：
 
