@@ -22,6 +22,9 @@ export function applySell(snapshot: SavedSnapshot, liveHolding: Holding, input: 
 
   const afterQty = Math.max(0, roundQuantity(holding.qty - qty));
   const now = new Date().toISOString();
+  const previousClose = liveHolding.qty > 0
+    ? liveHolding.price - (liveHolding.todayPnl / liveHolding.qty)
+    : liveHolding.price;
   const record: SellRecord = {
     id: createId(),
     type: 'sell',
@@ -40,6 +43,7 @@ export function applySell(snapshot: SavedSnapshot, liveHolding: Holding, input: 
     positionPriceAtSell: liveHolding.price,
     fees,
     realizedPnl: (price - costAtSell) * qty - fees,
+    todayRealizedPnl: (price - previousClose) * qty - fees,
     beforeQty: holding.qty,
     afterQty,
     tradedAt,
@@ -54,8 +58,9 @@ export function applySell(snapshot: SavedSnapshot, liveHolding: Holding, input: 
     holdings[index] = {
       ...holding,
       qty: afterQty,
-      todayPnl: holding.qty > 0 ? holding.todayPnl * (afterQty / holding.qty) : 0,
-      totalPnl: (holding.price - holding.cost) * afterQty,
+      price: liveHolding.price,
+      todayPnl: liveHolding.qty > 0 ? liveHolding.todayPnl * (afterQty / liveHolding.qty) : 0,
+      totalPnl: (liveHolding.price - holding.cost) * afterQty,
     };
   }
 

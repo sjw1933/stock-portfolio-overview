@@ -201,13 +201,14 @@ function normalizeSellRecord(item) {
   const holdingCost = Number(item?.holdingCost ?? costAtSell);
   const positionPriceAtSell = Number(item?.positionPriceAtSell ?? price);
   const fees = Number(item?.fees ?? 0);
+  const todayRealizedPnl = Number(item?.todayRealizedPnl ?? 0);
   const beforeQty = Number(item?.beforeQty);
   const afterQty = Number(item?.afterQty);
   const tradedAt = normalizeIsoDateTime(item?.tradedAt);
   const createdAt = normalizeIsoDateTime(item?.createdAt);
   if (!symbol || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0 || !Number.isFinite(costAtSell) || costAtSell <= 0) return null;
   if (!Number.isFinite(holdingCost) || holdingCost <= 0 || !Number.isFinite(positionPriceAtSell) || positionPriceAtSell <= 0) return null;
-  if (!Number.isFinite(fees) || fees < 0 || !tradedAt || !createdAt) return null;
+  if (!Number.isFinite(fees) || fees < 0 || !Number.isFinite(todayRealizedPnl) || !tradedAt || !createdAt) return null;
   return {
     id: String(item?.id || `${symbol}-${createdAt}`).slice(0, 100),
     type: 'sell',
@@ -226,6 +227,7 @@ function normalizeSellRecord(item) {
     positionPriceAtSell,
     fees,
     realizedPnl: (price - costAtSell) * qty - fees,
+    todayRealizedPnl,
     beforeQty: Number.isFinite(beforeQty) && beforeQty >= qty ? beforeQty : qty,
     afterQty: Number.isFinite(afterQty) && afterQty >= 0 ? afterQty : 0,
     tradedAt,
@@ -666,6 +668,10 @@ function normalizePayload(payload) {
     gross: asNumber(payload.summary.gross),
     cash: asNumber(payload.summary.cash),
     todayPnl: asNumber(payload.summary.todayPnl),
+    todayRealizedPnl: asNumber(payload.summary.todayRealizedPnl),
+    todayReturn: asNumber(payload.summary.todayReturn),
+    realizedPnl: asNumber(payload.summary.realizedPnl),
+    totalReturn: asNumber(payload.summary.totalReturn),
     totalPnl: asNumber(payload.summary.totalPnl),
   } : null;
 

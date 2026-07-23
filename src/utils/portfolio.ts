@@ -46,7 +46,8 @@ export function buildSummary(
   const today = localDateKey(new Date());
   const todayRealizedPnl = activeSales
     .filter((record) => localDateKey(new Date(record.tradedAt)) === today)
-    .reduce((sum, record) => sum + convert(record.realizedPnl, record.currency, currency), 0);
+    .reduce((sum, record) => sum + convert(record.todayRealizedPnl ?? 0, record.currency, currency), 0);
+  const todayReturn = todayPnl + todayRealizedPnl;
   const sellFees = activeSales.reduce((sum, record) => sum + convert(record.fees, record.currency, currency), 0);
   const buyFees = activeBuys.reduce((sum, record) => sum + convert(record.fees, record.currency, currency), 0);
   return {
@@ -58,6 +59,7 @@ export function buildSummary(
     todayPnl,
     realizedPnl,
     todayRealizedPnl,
+    todayReturn,
     totalReturn: totalPnl + realizedPnl,
     buyFees,
     sellFees,

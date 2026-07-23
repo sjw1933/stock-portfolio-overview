@@ -46,6 +46,7 @@ export type SellRecord = {
   positionPriceAtSell: number;
   fees: number;
   realizedPnl: number;
+  todayRealizedPnl: number;
   beforeQty: number;
   afterQty: number;
   tradedAt: string;
@@ -219,6 +220,7 @@ export type PortfolioSummary = {
   todayPnl: number;
   realizedPnl: number;
   todayRealizedPnl: number;
+  todayReturn: number;
   totalReturn: number;
   buyFees: number;
   sellFees: number;

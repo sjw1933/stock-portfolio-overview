@@ -23,7 +23,7 @@ export function PortfolioSummaryCard({ context }: { context: AppContext }) {
       </div>
       <div className="metric-grid">
         <Metric label="今日浮动盈亏" value={signed(context.summary.todayPnl, currency, context.masked)} positive={context.summary.todayPnl >= 0} />
-        <Metric label="今日已实现" value={signed(context.summary.todayRealizedPnl, currency, context.masked)} positive={context.summary.todayRealizedPnl >= 0} />
+        <Metric label="今日收益" value={signed(context.summary.todayReturn, currency, context.masked)} positive={context.summary.todayReturn >= 0} />
         <Metric label="持仓成本" value={money(context.summary.cost, currency, context.masked)} />
         <Metric
           label="剩余资产（估算）"
