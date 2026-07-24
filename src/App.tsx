@@ -80,7 +80,7 @@ function readHoldingNewsAiEnabled() {
 export function App() {
   const initialSnapshot = useMemo(readSavedSnapshot, []);
   const [tab, setTabState] = useState<Tab>(readInitialTab);
-  const [currency, setCurrency] = useState<Currency>('HKD');
+  const [currency, setCurrency] = useState<Currency>('USD');
   const [baseHoldings, setBaseHoldings] = useState(initialSnapshot?.holdings ?? importedHoldings);
   const [accountSnapshotsState, setAccountSnapshotsState] = useState(initialSnapshot?.accountSnapshots ?? accountSnapshots);
   const [savedSnapshot, setSavedSnapshot] = useState(initialSnapshot);
