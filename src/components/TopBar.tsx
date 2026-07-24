@@ -15,7 +15,7 @@ export function TopBar({ context }: { context: AppContext }) {
     <header className="topbar">
       <div>
         <p className="eyebrow">Stock Portfolio Overview</p>
-        <h1>股票持仓总览</h1>
+        <h1>股神看版</h1>
       </div>
       <div className="top-actions">
         <CurrencySwitch value={context.currency} onChange={context.setCurrency} />
