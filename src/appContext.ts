@@ -26,7 +26,7 @@ export type AppContext = {
   revokeBuy: (recordId: string) => Promise<void>;
   registerSell: (holding: Holding, input: SellInput) => Promise<void>;
   revokeSell: (recordId: string) => Promise<void>;
-  resetSnapshot: () => void;
+  resetSnapshot: () => Promise<void>;
   summary: PortfolioSummary;
   aggregated: AggregatedHolding[];
   risks: RiskAlert[];

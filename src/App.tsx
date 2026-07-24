@@ -14,7 +14,7 @@ import { applyQuotes, fetchLatestQuotes } from './utils/quotes';
 import { AlertTriangle, BrainCircuit } from 'lucide-react';
 import { fetchRiskAnalysis } from './utils/riskAnalysis';
 import { fetchHoldingNews } from './utils/holdingNews';
-import { clearSavedSnapshot, clearSharedSnapshot, fetchSharedSnapshot, pushSharedSnapshot, readSavedSnapshot, saveSnapshotFromDraft } from './utils/snapshotStorage';
+import { clearSharedSnapshot, fetchSharedSnapshot, pushSharedSnapshot, readSavedSnapshot, saveSnapshotFromDraft } from './utils/snapshotStorage';
 import { aiConfigPayload, readAiConfig, saveAiConfig } from './utils/aiConfig';
 import { applySell, reverseSell } from './utils/sellTransactions';
 import { applyBuy, reverseBuy } from './utils/buyTransactions';
@@ -223,11 +223,8 @@ export function App() {
     applySavedSnapshot(shared);
   }, [applySavedSnapshot, savedSnapshot]);
 
-  const resetSnapshot = useCallback(() => {
-    void clearSharedSnapshot().catch((error) => {
-      console.warn('shared snapshot clear failed', error);
-      clearSavedSnapshot();
-    });
+  const resetSnapshot = useCallback(async () => {
+    await clearSharedSnapshot();
     setSavedSnapshot(null);
     setBaseHoldings(importedHoldings);
     setHoldings(importedHoldings);

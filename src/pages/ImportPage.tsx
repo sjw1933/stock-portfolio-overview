@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type React from 'react';
-import { Check, FileSearch, History, Plus, RotateCcw, Search, Trash2, UploadCloud } from 'lucide-react';
+import { AlertTriangle, Check, FileSearch, History, Plus, RotateCcw, Search, Trash2, UploadCloud } from 'lucide-react';
 import { PanelTitle } from '../components/PanelTitle';
 import type { AppContext } from '../appContext';
 import type { AccountSnapshot, Broker, Holding, SnapshotDraft } from '../types';
@@ -42,9 +42,37 @@ export function ImportPage({ context }: { context: AppContext }) {
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([createManualAccount(context)]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetAcknowledged, setResetAcknowledged] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const manualValidation = useMemo(() => validateManualAccounts(manualAccounts), [manualAccounts]);
+
+  function openResetDialog() {
+    setResetAcknowledged(false);
+    setResetError('');
+    setResetDialogOpen(true);
+  }
+
+  async function confirmResetSnapshot() {
+    if (!resetAcknowledged || resetPending) return;
+    setResetPending(true);
+    setResetError('');
+    try {
+      await context.resetSnapshot();
+      setDraft(null);
+      setFiles([]);
+      setStatus('idle');
+      setError('');
+      setResetDialogOpen(false);
+    } catch (reason) {
+      setResetError(reason instanceof Error ? reason.message : '恢复默认快照失败，当前数据未修改');
+    } finally {
+      setResetPending(false);
+    }
+  }
 
   async function runOcr() {
     const controller = new AbortController();
@@ -162,7 +190,7 @@ export function ImportPage({ context }: { context: AppContext }) {
             <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 6))} />
             <div className="ocr-file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>
             <button onClick={() => void runOcr()} disabled={!files.length || status === 'loading'}>{status === 'loading' ? '识别中' : '开始 OCR 识别'}</button>
-            {context.savedSnapshot && <button className="secondary-action" onClick={context.resetSnapshot}><RotateCcw size={16} />恢复默认快照</button>}
+            {context.savedSnapshot && <button type="button" className="secondary-action" onClick={openResetDialog}><RotateCcw size={16} />恢复默认快照</button>}
             {error && <p className="warn-text">{error}</p>}
           </div>
         </section>
@@ -232,6 +260,75 @@ export function ImportPage({ context }: { context: AppContext }) {
       )}
 
       <ImportAuditPanel context={context} />
+
+      {resetDialogOpen && (
+        <ResetSnapshotDialog
+          acknowledged={resetAcknowledged}
+          pending={resetPending}
+          error={resetError}
+          holdingCount={context.holdings.length}
+          buyCount={context.buyRecords.filter((record) => record.status === 'active').length}
+          sellCount={context.sellRecords.filter((record) => record.status === 'active').length}
+          importLogCount={context.importLogs.length}
+          onAcknowledgedChange={setResetAcknowledged}
+          onCancel={() => !resetPending && setResetDialogOpen(false)}
+          onConfirm={() => void confirmResetSnapshot()}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResetSnapshotDialog({
+  acknowledged,
+  pending,
+  error,
+  holdingCount,
+  buyCount,
+  sellCount,
+  importLogCount,
+  onAcknowledgedChange,
+  onCancel,
+  onConfirm,
+}: {
+  acknowledged: boolean;
+  pending: boolean;
+  error: string;
+  holdingCount: number;
+  buyCount: number;
+  sellCount: number;
+  importLogCount: number;
+  onAcknowledgedChange: (checked: boolean) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-backdrop reset-confirm-backdrop" role="presentation">
+      <section className="reset-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="reset-confirm-title" aria-describedby="reset-confirm-description">
+        <div className="reset-confirm-head">
+          <span className="reset-confirm-icon"><AlertTriangle size={22} /></span>
+          <div>
+            <p className="eyebrow">高风险操作</p>
+            <h2 id="reset-confirm-title">恢复默认快照？</h2>
+          </div>
+        </div>
+        <p id="reset-confirm-description" className="reset-confirm-copy">这会删除服务器共享快照，并把看板恢复为源码内的演示数据。操作完成后无法在页面内撤销。</p>
+        <ul className="reset-impact-list" aria-label="将被清除的数据">
+          <li><span>当前持仓</span><b>{holdingCount} 只</b></li>
+          <li><span>有效买入记录</span><b>{buyCount} 条</b></li>
+          <li><span>有效卖出记录</span><b>{sellCount} 条</b></li>
+          <li><span>导入审计记录</span><b>{importLogCount} 条</b></li>
+        </ul>
+        <label className="reset-confirm-check">
+          <input type="checkbox" checked={acknowledged} disabled={pending} onChange={(event) => onAcknowledgedChange(event.target.checked)} />
+          <span>我已了解上述数据将被清除，并已确认不再需要当前快照。</span>
+        </label>
+        {error && <p className="reset-confirm-error" role="alert">{error}</p>}
+        <div className="reset-confirm-actions">
+          <button type="button" className="secondary-action" autoFocus disabled={pending} onClick={onCancel}>取消</button>
+          <button type="button" className="reset-confirm-danger" disabled={!acknowledged || pending} onClick={onConfirm}><RotateCcw size={16} />{pending ? '正在恢复' : '确认恢复默认快照'}</button>
+        </div>
+      </section>
     </div>
   );
 }

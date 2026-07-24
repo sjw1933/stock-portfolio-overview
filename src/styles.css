@@ -170,6 +170,133 @@ button {
   justify-content: center;
 }
 
+.reset-confirm-backdrop {
+  place-items: center;
+}
+
+.reset-confirm-modal {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 14px;
+  border: 1px solid #f1c7d0;
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 24%);
+}
+
+.reset-confirm-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.reset-confirm-head h2 {
+  margin: 2px 0 0;
+  color: #111827;
+  font-size: 19px;
+}
+
+.reset-confirm-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.reset-confirm-copy {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.reset-impact-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #e7ebf1;
+  list-style: none;
+}
+
+.reset-impact-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  border-bottom: 1px solid #e7ebf1;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.reset-impact-list b {
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.reset-confirm-check {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid #f1c7d0;
+  border-radius: 8px;
+  background: #fff7f8;
+  color: #881337;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.reset-confirm-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #be123c;
+}
+
+.reset-confirm-error {
+  margin: 0;
+  color: #be123c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reset-confirm-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 8px;
+}
+
+.reset-confirm-actions button {
+  min-height: 44px;
+  justify-content: center;
+}
+
+.reset-confirm-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #be123c;
+  border-radius: 8px;
+  background: #be123c;
+  color: #fff;
+  font-weight: 800;
+}
+
+.reset-confirm-danger:disabled {
+  border-color: #f1c7d0;
+  background: #f8dfe4;
+  color: #9f5969;
+  cursor: not-allowed;
+}
+
 .dashboard-grid,
 .page-stack,
 .sidebar-stack {
