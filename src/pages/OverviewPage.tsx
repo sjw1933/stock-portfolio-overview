@@ -18,8 +18,8 @@ export function OverviewPage({ context, sidebar = false }: { context: AppContext
         aiEnabled={context.newsAiEnabled}
         onAiEnabledChange={context.setNewsAiEnabled}
       />
-      <StructurePanel context={context} />
       {sidebar && context.tab === 'holdings' && <FearGreedPanel />}
+      <StructurePanel context={context} />
       {!sidebar && <HoldingList context={context} />}
     </div>
   );
