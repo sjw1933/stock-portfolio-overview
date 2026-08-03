@@ -38,7 +38,9 @@ export async function fetchLatestQuotes(holdings: Holding[], signal?: AbortSigna
   if (extendedResult.status === 'fulfilled') {
     for (const [symbol, extended] of extendedResult.value) {
       const regular = quotes.get(symbol);
-      const previousClose = regular?.previousClose ?? extended.previousClose;
+      const previousClose = extended.session === 'pre'
+        ? extended.previousClose ?? regular?.price ?? regular?.previousClose
+        : regular?.previousClose ?? extended.previousClose;
       quotes.set(symbol, {
         ...regular,
         price: extended.price,
