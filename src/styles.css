@@ -1315,7 +1315,7 @@ button {
 .table-head,
 .holding-row {
   display: grid;
-  grid-template-columns: minmax(92px, 1.35fr) minmax(80px, 1fr) minmax(74px, 0.9fr) minmax(80px, 1fr);
+  grid-template-columns: minmax(92px, 1.35fr) minmax(80px, 1fr) minmax(74px, 0.9fr) minmax(80px, 1fr) minmax(80px, 1fr);
   gap: 10px;
 }
 
@@ -1370,6 +1370,10 @@ button {
   border-color: #c7d2fe;
   background: #eef2ff;
   color: #4f46e5;
+}
+
+.holding-mobile-label {
+  display: none !important;
 }
 
 .holding-row span {
@@ -2384,6 +2388,27 @@ button {
 
   .holding-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .today-pnl-cell {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 9px;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  .holding-mobile-label {
+    display: block !important;
+    margin-top: 0 !important;
+    color: #64748b !important;
+    font-size: 12px !important;
+    font-weight: 700;
+  }
+
+  .today-pnl-values {
+    text-align: right;
   }
 
   .account-row {
