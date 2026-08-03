@@ -32,7 +32,14 @@ export function HoldingList({ context, limit }: { context: AppContext; limit?: n
             <span>{context.masked ? '****' : item.qty.toFixed(item.qty < 1 ? 4 : 2)}</span>
           </div>
           <div>
-            <b>{item.price.toFixed(3)}</b>
+            <b className="holding-price">
+              {item.price.toFixed(3)}
+              {context.quoteSessions[item.symbol] && (
+                <em className={`quote-session quote-session-${context.quoteSessions[item.symbol]}`}>
+                  {context.quoteSessions[item.symbol] === 'pre' ? '盘前' : '盘后'}
+                </em>
+              )}
+            </b>
             <span>{item.cost.toFixed(3)}</span>
           </div>
           <div className={item.totalPnl >= 0 ? 'pos' : 'neg'}>

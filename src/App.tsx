@@ -8,7 +8,7 @@ import { HoldingsPage } from './pages/HoldingsPage';
 import { TrendsPage } from './pages/TrendsPage';
 import { ImportPage } from './pages/ImportPage';
 import { AskPage } from './pages/AskPage';
-import type { BuyInput, Currency, Holding, HoldingNewsStatus, QuoteStatus, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
+import type { BuyInput, Currency, Holding, HoldingNewsStatus, QuoteSession, QuoteStatus, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
 import { aggregateHoldings, buildSummary } from './utils/portfolio';
 import { applyQuotes, fetchLatestQuotes } from './utils/quotes';
 import { AlertTriangle, BrainCircuit } from 'lucide-react';
@@ -90,6 +90,7 @@ export function App() {
   const [confirmedRows, setConfirmedRows] = useState<Record<string, boolean>>({});
   const [lastRefresh, setLastRefresh] = useState('截图导入价');
   const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('idle');
+  const [quoteSessions, setQuoteSessions] = useState<Record<string, QuoteSession | undefined>>({});
   const [riskAnalysis, setRiskAnalysis] = useState<Awaited<ReturnType<typeof fetchRiskAnalysis>> | null>(null);
   const [riskAnalysisStatus, setRiskAnalysisStatus] = useState<'idle' | 'loading' | 'ai' | 'fallback' | 'error'>('idle');
   const [holdingNews, setHoldingNews] = useState<Awaited<ReturnType<typeof fetchHoldingNews>> | null>(null);
@@ -133,6 +134,7 @@ export function App() {
     setAccountSnapshotsState(snapshot.accountSnapshots);
     setLastRefresh('共享快照价');
     setQuoteStatus('idle');
+    setQuoteSessions({});
   }, []);
 
   const refresh = useCallback(async () => {
@@ -142,12 +144,16 @@ export function App() {
 
     try {
       if (!baseHoldings.length) {
+        setQuoteSessions({});
         setLastRefresh(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
         setQuoteStatus('live');
         return;
       }
       const quotes = await fetchLatestQuotes(baseHoldings, controller.signal);
       setHoldings((current) => applyQuotes(current, quotes));
+      setQuoteSessions(Object.fromEntries(
+        Array.from(quotes.entries()).flatMap(([symbol, quote]) => quote.session ? [[symbol, quote.session]] : []),
+      ));
       setLastRefresh(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
       setQuoteStatus('live');
     } catch (error) {
@@ -390,6 +396,7 @@ export function App() {
     setConfirmedRows,
     lastRefresh,
     quoteStatus,
+    quoteSessions,
     refresh,
     holdings,
     accountSnapshots: accountSnapshotsState,

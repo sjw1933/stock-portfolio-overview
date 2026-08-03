@@ -1,6 +1,7 @@
 import type React from 'react';
 
 export type Currency = 'HKD' | 'USD' | 'CNY';
+export type QuoteSession = 'pre' | 'post';
 export type Tab = 'overview' | 'holdings' | 'trends' | 'ask' | 'import';
 export type Broker = '盈立证券' | '致富证券' | '星财富' | 'Schwab' | 'US Bancorp Advisors';
 

@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { fetchExtendedQuotes } from './extended-quotes.mjs';
 
 const port = Number(process.env.PORT || process.env.RISK_API_PORT || 8791);
 const provider = process.env.RISK_LLM_PROVIDER || 'openai';
@@ -336,6 +337,20 @@ function readMarketHistoryQuery(req) {
   const symbol = String(url.searchParams.get('symbol') || '').toUpperCase();
   const period = String(url.searchParams.get('period') || 'day');
   return { symbol, period };
+}
+
+function readExtendedQuoteQuery(req) {
+  const url = new URL(req.url, 'http://localhost');
+  const etfs = new Set(String(url.searchParams.get('etfs') || '').split(',').map((item) => item.trim().toUpperCase()));
+  return String(url.searchParams.get('symbols') || '')
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter((symbol) => /^[A-Z][A-Z0-9.-]{0,9}\.US$/.test(symbol))
+    .slice(0, 30)
+    .map((symbol) => ({
+      symbol,
+      assetClass: etfs.has(symbol) ? 'etf' : guessUsAssetClass(symbol.replace(/\.US$/, '')),
+    }));
 }
 
 let fearGreedMemoryCache = null;
@@ -1203,6 +1218,15 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { code: 0, data });
     } catch (error) {
       return sendJson(res, 400, { code: 400, message: error instanceof Error ? error.message : 'market history failed', data: null });
+    }
+  }
+  if (req.method === 'GET' && req.url?.startsWith('/api/extended-quotes')) {
+    try {
+      const entries = readExtendedQuoteQuery(req);
+      const data = await fetchExtendedQuotes(entries);
+      return sendJson(res, 200, { code: 0, data });
+    } catch (error) {
+      return sendJson(res, 502, { code: 502, message: error instanceof Error ? error.message : 'extended quote fetch failed', data: null });
     }
   }
   if (req.url === '/api/snapshot') {

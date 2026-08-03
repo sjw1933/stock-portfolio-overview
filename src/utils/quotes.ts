@@ -1,4 +1,4 @@
-import type { Holding } from '../types';
+import type { Holding, QuoteSession } from '../types';
 
 type YahooQuote = {
   symbol: string;
@@ -16,9 +16,45 @@ export type QuoteSnapshot = {
   change?: number;
   previousClose?: number;
   name?: string;
+  session?: QuoteSession;
+  updatedAt?: string;
+};
+
+type ExtendedQuote = {
+  symbol: string;
+  price: number;
+  previousClose?: number;
+  session: QuoteSession;
+  updatedAt?: string;
 };
 
 export async function fetchLatestQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
+  const [regularResult, extendedResult] = await Promise.allSettled([
+    fetchTencentQuotes(holdings, signal),
+    fetchExtendedUsQuotes(holdings, signal),
+  ]);
+  const quotes = regularResult.status === 'fulfilled' ? regularResult.value : new Map<string, QuoteSnapshot>();
+
+  if (extendedResult.status === 'fulfilled') {
+    for (const [symbol, extended] of extendedResult.value) {
+      const regular = quotes.get(symbol);
+      const previousClose = regular?.previousClose ?? extended.previousClose;
+      quotes.set(symbol, {
+        ...regular,
+        price: extended.price,
+        previousClose,
+        change: previousClose ? extended.price - previousClose : undefined,
+        session: extended.session,
+        updatedAt: extended.updatedAt,
+      });
+    }
+  }
+
+  if (quotes.size === 0) return fetchYahooQuotes(holdings, signal);
+  return quotes;
+}
+
+async function fetchTencentQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
   const symbols = holdings
     .flatMap((holding) => tencentQuoteSymbols(holding.symbol))
     .filter(Boolean)
@@ -31,13 +67,26 @@ export async function fetchLatestQuotes(holdings: Holding[], signal?: AbortSigna
   }
 
   const text = await response.text();
-  const quotes = parseTencentQuotes(text, holdings);
+  return parseTencentQuotes(text, holdings);
+}
 
-  if (quotes.size === 0) {
-    return fetchYahooQuotes(holdings, signal);
-  }
+async function fetchExtendedUsQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, ExtendedQuote>> {
+  const usHoldings = holdings.filter(
+    (holding) => holding.market === 'US' && /^[A-Z][A-Z0-9.-]{0,9}\.US$/i.test(holding.symbol),
+  );
+  if (!usHoldings.length) return new Map();
 
-  return quotes;
+  const symbols = Array.from(new Set(usHoldings.map((holding) => holding.symbol.toUpperCase())));
+  const etfs = Array.from(new Set(
+    usHoldings.filter((holding) => holding.type !== '个股').map((holding) => holding.symbol.toUpperCase()),
+  ));
+  const params = new URLSearchParams({ symbols: symbols.join(',') });
+  if (etfs.length) params.set('etfs', etfs.join(','));
+
+  const response = await fetch(`/api/extended-quotes?${params.toString()}`, { signal, cache: 'no-store' });
+  if (!response.ok) throw new Error(`extended quote request failed: ${response.status}`);
+  const payload = (await response.json()) as { code?: number; data?: { quotes?: ExtendedQuote[] } };
+  return new Map((payload.data?.quotes ?? []).map((quote) => [quote.symbol, quote]));
 }
 
 function parseTencentQuotes(text: string, holdings: Holding[]): Map<string, QuoteSnapshot> {

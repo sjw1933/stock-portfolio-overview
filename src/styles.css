@@ -1347,6 +1347,31 @@ button {
   font-size: 15px;
 }
 
+.holding-price {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.quote-session {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.quote-session-post {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
 .holding-row span {
   margin-top: 4px;
   color: #9ca3af;
