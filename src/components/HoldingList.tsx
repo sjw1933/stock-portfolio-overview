@@ -49,15 +49,15 @@ export function HoldingList({ context, limit }: { context: AppContext; limit?: n
               <b>{money(marketValue, context.currency, context.masked)}</b>
               <span>{context.masked ? '****' : item.qty.toFixed(item.qty < 1 ? 4 : 2)}</span>
             </div>
-            <div>
-              <b className="holding-price">
-                {item.price.toFixed(3)}
+            <div className="holding-price-cell">
+              <div className="holding-price-line">
+                <b className="holding-price-value">{item.price.toFixed(3)}</b>
                 {session && (
                   <em className={`quote-session quote-session-${session}`}>
                     {quoteViewSessionLabel(session)}
                   </em>
                 )}
-              </b>
+              </div>
               <span>{item.cost.toFixed(3)}</span>
             </div>
             <div className={item.totalPnl >= 0 ? 'pos' : 'neg'}>

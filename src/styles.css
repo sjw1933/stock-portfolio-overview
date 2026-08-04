@@ -1748,15 +1748,34 @@ button {
   font-size: 15px;
 }
 
-.holding-price {
-  display: flex !important;
+.holding-price-cell {
+  min-width: 0;
+}
+
+.holding-price-line {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.holding-price-value {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep price digits fully visible; badge wraps to next line when tight. */
+.holding-price-line .holding-price-value {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .quote-session {
   flex: 0 0 auto;
-  padding: 2px 4px;
+  max-width: 100%;
+  padding: 2px 5px;
   border: 1px solid #bfdbfe;
   border-radius: 4px;
   background: #eff6ff;
@@ -1764,7 +1783,8 @@ button {
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .quote-session-regular {
