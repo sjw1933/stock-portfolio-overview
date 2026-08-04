@@ -1179,7 +1179,7 @@ button {
   display: grid;
   grid-template-columns: 1fr;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .structure-body-chart-only {
@@ -1197,13 +1197,13 @@ button {
 }
 
 .pie-wrap-large {
-  height: 220px;
-  max-width: 280px;
+  height: 240px;
+  max-width: 320px;
 }
 
 .fold-sidebar .pie-wrap,
 .fold-sidebar .pie-wrap-large {
-  height: 190px;
+  height: 210px;
   max-width: 100%;
 }
 
@@ -1214,6 +1214,44 @@ button {
   color: #94a3b8;
   font-size: 12px;
   font-weight: 700;
+}
+
+.structure-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.structure-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid #e5ebf3;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.structure-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.structure-legend em {
+  color: #0f172a;
+  font-style: normal;
 }
 
 .outlook-panel {

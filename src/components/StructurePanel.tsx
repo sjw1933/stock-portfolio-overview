@@ -5,19 +5,20 @@ import type { AppContext } from '../appContext';
 import { PanelTitle } from './PanelTitle';
 import { convert, money } from '../utils/currency';
 
+/** Distinct hues so adjacent holdings stay easy to tell apart. */
 const palette = [
-  '#1769e8',
-  '#2687ff',
-  '#0f5cd6',
-  '#4f8ef7',
-  '#7aaefc',
-  '#3b82f6',
-  '#2563eb',
-  '#1d4ed8',
-  '#60a5fa',
-  '#93c5fd',
-  '#38bdf8',
-  '#0ea5e9',
+  '#1769e8', // blue
+  '#e4485f', // rose
+  '#0d9488', // teal
+  '#d97706', // amber
+  '#7c3aed', // violet
+  '#059669', // green
+  '#ea580c', // orange
+  '#0891b2', // cyan
+  '#db2777', // pink
+  '#4f46e5', // indigo
+  '#65a30d', // lime
+  '#c026d3', // fuchsia
 ];
 
 function shortSymbol(symbol: string) {
@@ -37,17 +38,16 @@ function PieSliceLabel(props: {
   cx?: number;
   cy?: number;
   midAngle?: number;
-  innerRadius?: number;
   outerRadius?: number;
   percent?: number;
   name?: string;
+  payload?: PieSlice;
 }) {
-  const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
+  const { cx, cy, midAngle, outerRadius, percent, name, payload } = props;
   if (
     cx == null
     || cy == null
     || midAngle == null
-    || innerRadius == null
     || outerRadius == null
     || percent == null
     || !name
@@ -55,31 +55,48 @@ function PieSliceLabel(props: {
     return null;
   }
 
-  // Skip tiny slices to avoid overlapping labels.
-  if (percent < 0.04) return null;
+  // Tiny slices: keep the chart clean; tooltip still has full detail.
+  if (percent < 0.035) return null;
 
   const RADIAN = Math.PI / 180;
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+  const radius = outerRadius + 16;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const anchor = x >= cx ? 'start' : 'end';
   const pct = (percent * 100).toFixed(0);
+  const color = payload?.color || '#0f172a';
 
   return (
-    <text
-      x={x}
-      y={y}
-      fill="#ffffff"
-      textAnchor="middle"
-      dominantBaseline="central"
-      fontSize={10}
-      fontWeight={800}
-      style={{ pointerEvents: 'none', textShadow: '0 1px 2px rgb(15 23 42 / 35%)' }}
-    >
-      {name}
-      <tspan x={x} dy="1.15em" fontSize={9} fontWeight={700}>
+    <g style={{ pointerEvents: 'none' }}>
+      <text
+        x={x}
+        y={y - 6}
+        fill={color}
+        textAnchor={anchor}
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={800}
+        stroke="#ffffff"
+        strokeWidth={3}
+        paintOrder="stroke"
+      >
+        {name}
+      </text>
+      <text
+        x={x}
+        y={y + 8}
+        fill="#0f172a"
+        textAnchor={anchor}
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={800}
+        stroke="#ffffff"
+        strokeWidth={3}
+        paintOrder="stroke"
+      >
         {pct}%
-      </tspan>
-    </text>
+      </text>
+    </g>
   );
 }
 
@@ -103,9 +120,11 @@ export function StructurePanel({ context }: { context: AppContext }) {
       .sort((a, b) => b.value - a.value);
 
     const total = rows.reduce((sum, item) => sum + item.value, 0);
-    const withPct = rows.map((item) => ({
+    // Re-assign colors after sort so largest slices get the strongest hues first.
+    const withPct = rows.map((item, index) => ({
       ...item,
       percent: total > 0.000001 ? item.value / total : 0,
+      color: palette[index % palette.length],
     }));
 
     return { pieData: withPct, gross: total };
@@ -122,19 +141,22 @@ export function StructurePanel({ context }: { context: AppContext }) {
         <div className="pie-wrap pie-wrap-large">
           {pieData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <RePieChart>
+              <RePieChart margin={{ top: 12, right: 28, bottom: 12, left: 28 }}>
                 <Pie
                   data={pieData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={42}
-                  outerRadius={78}
-                  paddingAngle={pieData.length > 1 ? 2 : 0}
-                  stroke="#fff"
-                  strokeWidth={1}
-                  labelLine={false}
+                  innerRadius={40}
+                  outerRadius={72}
+                  paddingAngle={pieData.length > 1 ? 2.5 : 0}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                  labelLine={{
+                    stroke: '#94a3b8',
+                    strokeWidth: 1,
+                  }}
                   label={<PieSliceLabel />}
                 >
                   {pieData.map((entry) => (
@@ -157,6 +179,17 @@ export function StructurePanel({ context }: { context: AppContext }) {
             <div className="structure-empty">暂无持仓市值</div>
           )}
         </div>
+        {pieData.length > 0 && (
+          <ul className="structure-legend" aria-label="持仓颜色图例">
+            {pieData.map((item) => (
+              <li key={item.key}>
+                <i style={{ background: item.color }} />
+                <span>{item.name}</span>
+                <em>{(item.percent * 100).toFixed(1)}%</em>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );
