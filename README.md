@@ -81,7 +81,7 @@ AI Key 有两种配置方式：
 
 ## 部署
 
-部署说明和 Caddy 示例见 [README_DEPLOY.md](./README_DEPLOY.md)，代码交接说明见 [HANDOFF_FOR_FRIEND.md](./HANDOFF_FOR_FRIEND.md)。
+部署说明和 Caddy 示例见 [README_DEPLOY.md](./README_DEPLOY.md)。
 
 ## 免责声明
 

@@ -16,7 +16,7 @@ coverage/
 .idea/
 .vscode/
 
-# Local private ops notes (VPS, passwords, SSH paths) — never publish
-HANDOFF_PRIVATE.md
+# Handoff / private ops notes — never publish
+HANDOFF*.md
 *PRIVATE*.md
 *.private.md
