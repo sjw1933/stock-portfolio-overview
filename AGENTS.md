@@ -23,6 +23,8 @@ node --check server/risk-analysis.mjs
 - `src/App.tsx`：应用状态、行情刷新、共享快照同步和交易提交
 - `src/pages/ImportPage.tsx`：OCR 与手动持仓增量录入
 - `src/pages/HoldingsPage.tsx`：当前持仓、买入记录和卖出记录
+- `src/pages/ReturnsPage.tsx`：收益日历与选中日/周期明细
+- `src/utils/returnsCalendar.ts`：日线收益估算与仓位已知日起点
 - `src/pages/TrendsPage.tsx`：单标的趋势和买卖标记
 - `src/utils/snapshotStorage.ts`：快照增量合并和导入审计
 - `src/utils/buyTransactions.ts`：买入、加权成本和安全撤销
