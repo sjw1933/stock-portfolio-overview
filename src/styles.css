@@ -629,6 +629,88 @@ button {
   gap: 9px;
 }
 
+.news-board.is-collapsed {
+  gap: 0;
+}
+
+.news-board-head {
+  min-width: 0;
+}
+
+.news-collapse-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.news-collapse-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.news-collapse-title > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.news-collapse-title b {
+  color: #0f172a;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.news-collapse-title em {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.news-collapse-meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.news-collapse-chevron {
+  transition: transform 0.18s ease;
+}
+
+.news-collapse-chevron.open {
+  transform: rotate(180deg);
+}
+
+.news-board-body {
+  display: grid;
+  gap: 9px;
+}
+
+@media (max-width: 389px) {
+  .news-collapse-hint {
+    display: none;
+  }
+}
+
 .risk-summary,
 .news-summary {
   margin: -2px 0 2px;
