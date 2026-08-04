@@ -153,10 +153,6 @@ function PieSliceLabel(props: {
   );
 }
 
-function formatStructureTime(ts: number) {
-  return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
 export function StructurePanel({ context }: { context: AppContext }) {
   const currency = context.currency;
   const latestHoldingsRef = useRef(context.aggregated);
@@ -168,19 +164,16 @@ export function StructurePanel({ context }: { context: AppContext }) {
   );
 
   const [snapshotRows, setSnapshotRows] = useState<StructureSnapshotRow[]>(() => buildSnapshot(context.aggregated));
-  const [snapshotAt, setSnapshotAt] = useState(() => Date.now());
 
   // Immediate refresh when holdings composition changes (import / buy / sell qty).
   useEffect(() => {
     setSnapshotRows(buildSnapshot(context.aggregated));
-    setSnapshotAt(Date.now());
   }, [structureKey]);
 
   // Timed refresh every 10 minutes from the latest live marks.
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSnapshotRows(buildSnapshot(latestHoldingsRef.current));
-      setSnapshotAt(Date.now());
     }, structureRefreshMs);
     return () => window.clearInterval(timer);
   }, []);
@@ -191,7 +184,7 @@ export function StructurePanel({ context }: { context: AppContext }) {
   );
 
   const actionText = gross > 0
-    ? `合计 ${money(gross, currency, context.masked)} · ${formatStructureTime(snapshotAt)} · 10分钟刷新`
+    ? `合计 ${money(gross, currency, context.masked)} · 10分钟刷新`
     : '暂无持仓';
 
   return (
