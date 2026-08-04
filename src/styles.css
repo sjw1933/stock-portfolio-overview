@@ -1177,7 +1177,7 @@ button {
 
 .structure-body {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
 }
@@ -1187,32 +1187,55 @@ button {
 }
 
 .fold-sidebar .pie-wrap {
-  height: 130px;
+  height: 170px;
 }
 
 .pie-wrap {
-  height: 170px;
+  height: 200px;
+  min-width: 0;
+}
+
+.structure-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .structure-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
 }
 
-.structure-list div {
+.structure-list > div {
   display: grid;
-  grid-template-columns: auto minmax(110px, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding-bottom: 10px;
+  gap: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #edf1f6;
 }
 
 .structure-list span {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: #64748b;
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.structure-pct {
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .structure-list b {
@@ -1220,14 +1243,29 @@ button {
   text-align: right;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+  color: #0f172a;
 }
 
 .structure-list i {
   display: inline-block;
   width: 9px;
   height: 9px;
-  margin-right: 7px;
+  flex: 0 0 auto;
   border-radius: 50%;
+}
+
+.structure-market-foot {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 4px !important;
+  padding-top: 4px;
+  border-bottom: 0 !important;
+}
+
+.structure-market-foot span {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .outlook-panel {
