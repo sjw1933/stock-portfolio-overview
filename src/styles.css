@@ -363,6 +363,47 @@ button {
   gap: 12px;
 }
 
+.hero-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.session-segmented {
+  flex: 0 0 auto;
+  border-color: rgb(255 255 255 / 28%);
+  background: rgb(255 255 255 / 14%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
+}
+
+.session-segmented button {
+  min-width: 40px;
+  height: 28px;
+  padding: 0 8px;
+  color: rgb(255 255 255 / 82%);
+  font-size: 11px;
+}
+
+.session-segmented button.active {
+  background: #fff;
+  color: #1769e8;
+}
+
+@media (max-width: 389px) {
+  .hero-row {
+    flex-wrap: wrap;
+  }
+
+  .hero-row-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
 .hero-row .muted {
   margin-bottom: 14px;
   color: rgb(255 255 255 / 88%);
@@ -1364,6 +1405,12 @@ button {
   font-style: normal;
   font-weight: 800;
   line-height: 1;
+}
+
+.quote-session-regular {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
 }
 
 .quote-session-post {

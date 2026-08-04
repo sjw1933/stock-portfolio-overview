@@ -8,9 +8,9 @@ import { HoldingsPage } from './pages/HoldingsPage';
 import { TrendsPage } from './pages/TrendsPage';
 import { ImportPage } from './pages/ImportPage';
 import { AskPage } from './pages/AskPage';
-import type { BuyInput, Currency, Holding, HoldingNewsStatus, QuoteSession, QuoteStatus, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
+import type { BuyInput, Currency, Holding, HoldingNewsStatus, MarketSession, QuoteSession, QuoteStatus, QuoteViewSession, SavedSnapshot, SellInput, SnapshotDraft, Tab } from './types';
 import { aggregateHoldings, buildSummary } from './utils/portfolio';
-import { applyQuotes, fetchLatestQuotes } from './utils/quotes';
+import { applyQuotes, defaultQuoteViewSession, fetchLatestQuotes, getUsMarketSession } from './utils/quotes';
 import { AlertTriangle, BrainCircuit } from 'lucide-react';
 import { fetchRiskAnalysis } from './utils/riskAnalysis';
 import { fetchHoldingNews } from './utils/holdingNews';
@@ -90,6 +90,9 @@ export function App() {
   const [confirmedRows, setConfirmedRows] = useState<Record<string, boolean>>({});
   const [lastRefresh, setLastRefresh] = useState('截图导入价');
   const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>('idle');
+  const [quoteViewSession, setQuoteViewSessionState] = useState<QuoteViewSession>(() => defaultQuoteViewSession());
+  const [quoteViewPinned, setQuoteViewPinned] = useState(false);
+  const [marketSession, setMarketSession] = useState<MarketSession>(() => getUsMarketSession());
   const [quoteSessions, setQuoteSessions] = useState<Record<string, QuoteSession | undefined>>({});
   const [riskAnalysis, setRiskAnalysis] = useState<Awaited<ReturnType<typeof fetchRiskAnalysis>> | null>(null);
   const [riskAnalysisStatus, setRiskAnalysisStatus] = useState<'idle' | 'loading' | 'ai' | 'fallback' | 'error'>('idle');
@@ -111,6 +114,11 @@ export function App() {
   const setTab = useCallback((nextTab: Tab) => {
     setTabState(nextTab);
     window.history.replaceState(null, '', `#${nextTab}`);
+  }, []);
+
+  const setQuoteViewSession = useCallback((session: QuoteViewSession) => {
+    setQuoteViewPinned(true);
+    setQuoteViewSessionState(session);
   }, []);
 
   const refreshNews = useCallback(async () => {
@@ -142,6 +150,13 @@ export function App() {
     const timeout = window.setTimeout(() => controller.abort(), 12000);
     setQuoteStatus('refreshing');
 
+    const liveMarketSession = getUsMarketSession();
+    setMarketSession(liveMarketSession);
+    const viewSession = quoteViewPinned ? quoteViewSession : defaultQuoteViewSession();
+    if (!quoteViewPinned && viewSession !== quoteViewSession) {
+      setQuoteViewSessionState(viewSession);
+    }
+
     try {
       if (!baseHoldings.length) {
         setQuoteSessions({});
@@ -149,10 +164,17 @@ export function App() {
         setQuoteStatus('live');
         return;
       }
-      const quotes = await fetchLatestQuotes(baseHoldings, controller.signal);
+      const { quotes, marketSession: nextMarketSession } = await fetchLatestQuotes(
+        baseHoldings,
+        controller.signal,
+        viewSession,
+      );
+      setMarketSession(nextMarketSession);
       setHoldings((current) => applyQuotes(current, quotes));
       setQuoteSessions(Object.fromEntries(
-        Array.from(quotes.entries()).flatMap(([symbol, quote]) => quote.session ? [[symbol, quote.session]] : []),
+        Array.from(quotes.entries())
+          .filter(([, quote]) => quote.session)
+          .map(([symbol, quote]) => [symbol, quote.session!]),
       ));
       setLastRefresh(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
       setQuoteStatus('live');
@@ -163,7 +185,7 @@ export function App() {
     } finally {
       window.clearTimeout(timeout);
     }
-  }, [baseHoldings]);
+  }, [baseHoldings, quoteViewPinned, quoteViewSession]);
 
   const saveDraftSnapshot = useCallback(async (draft: SnapshotDraft, fileNames: string[]) => {
     const remoteSnapshot = await fetchSharedSnapshot();
@@ -396,6 +418,9 @@ export function App() {
     setConfirmedRows,
     lastRefresh,
     quoteStatus,
+    quoteViewSession,
+    setQuoteViewSession,
+    marketSession,
     quoteSessions,
     refresh,
     holdings,

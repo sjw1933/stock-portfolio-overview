@@ -1,4 +1,4 @@
-import type { Holding, QuoteSession } from '../types';
+import type { Holding, MarketSession, QuoteSession, QuoteViewSession } from '../types';
 
 type YahooQuote = {
   symbol: string;
@@ -28,32 +28,104 @@ type ExtendedQuote = {
   updatedAt?: string;
 };
 
-export async function fetchLatestQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
-  const [regularResult, extendedResult] = await Promise.allSettled([
-    fetchTencentQuotes(holdings, signal),
-    fetchExtendedUsQuotes(holdings, signal),
-  ]);
-  const quotes = regularResult.status === 'fulfilled' ? regularResult.value : new Map<string, QuoteSnapshot>();
+type ExtendedQuotesResponse = {
+  quotes: Map<string, ExtendedQuote>;
+  marketSession: MarketSession;
+};
 
-  if (extendedResult.status === 'fulfilled') {
-    for (const [symbol, extended] of extendedResult.value) {
+const marketClockFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+export function getUsMarketSession(now = new Date()): MarketSession {
+  const parts = Object.fromEntries(
+    marketClockFormatter.formatToParts(now).map((part) => [part.type, part.value]),
+  );
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const tradingDay = !['Sat', 'Sun'].includes(parts.weekday);
+
+  if (!tradingDay || minutes < 4 * 60 || minutes >= 20 * 60) return 'closed';
+  if (minutes < 9 * 60 + 30) return 'pre';
+  if (minutes < 16 * 60) return 'regular';
+  return 'post';
+}
+
+/** Outside pre / regular / post windows, default to the day's regular-session PnL. */
+export function defaultQuoteViewSession(now = new Date()): QuoteViewSession {
+  const session = getUsMarketSession(now);
+  if (session === 'pre' || session === 'post') return session;
+  return 'regular';
+}
+
+export function quoteViewSessionLabel(view: QuoteViewSession) {
+  return view === 'pre' ? '盘前' : view === 'post' ? '盘后' : '盘中';
+}
+
+export async function fetchLatestQuotes(
+  holdings: Holding[],
+  signal?: AbortSignal,
+  viewSession: QuoteViewSession = 'regular',
+): Promise<{ quotes: Map<string, QuoteSnapshot>; marketSession: MarketSession }> {
+  const localMarketSession = getUsMarketSession();
+  const needsSessionQuotes = viewSession === 'pre'
+    || viewSession === 'post'
+    || (viewSession === 'regular' && (localMarketSession === 'post' || localMarketSession === 'closed'));
+
+  const [regularResult, sessionResult] = await Promise.allSettled([
+    fetchTencentQuotes(holdings, signal),
+    needsSessionQuotes
+      ? fetchSessionUsQuotes(holdings, viewSession, signal)
+      : Promise.resolve({ quotes: new Map<string, ExtendedQuote>(), marketSession: localMarketSession }),
+  ]);
+
+  const quotes = regularResult.status === 'fulfilled' ? regularResult.value : new Map<string, QuoteSnapshot>();
+  const marketSession = sessionResult.status === 'fulfilled'
+    ? sessionResult.value.marketSession
+    : localMarketSession;
+
+  if (sessionResult.status === 'fulfilled') {
+    for (const [symbol, sessionQuote] of sessionResult.value.quotes) {
       const regular = quotes.get(symbol);
-      const previousClose = extended.session === 'pre'
-        ? extended.previousClose ?? regular?.price ?? regular?.previousClose
-        : regular?.previousClose ?? extended.previousClose;
+      const previousClose = resolveSessionPreviousClose(viewSession, sessionQuote, regular);
       quotes.set(symbol, {
         ...regular,
-        price: extended.price,
+        price: sessionQuote.price,
         previousClose,
-        change: previousClose ? extended.price - previousClose : undefined,
-        session: extended.session,
-        updatedAt: extended.updatedAt,
+        change: previousClose ? sessionQuote.price - previousClose : undefined,
+        session: viewSession,
+        updatedAt: sessionQuote.updatedAt,
       });
     }
   }
 
-  if (quotes.size === 0) return fetchYahooQuotes(holdings, signal);
-  return quotes;
+  // Keep a consistent session tag on US quotes so the UI can show 盘前/盘中/盘后.
+  for (const [symbol, quote] of quotes) {
+    if (/\.US$/i.test(symbol) && !quote.session) {
+      quotes.set(symbol, { ...quote, session: viewSession });
+    }
+  }
+
+  if (quotes.size === 0) {
+    const fallback = await fetchYahooQuotes(holdings, signal, viewSession);
+    return { quotes: fallback, marketSession };
+  }
+
+  return { quotes, marketSession };
+}
+
+function resolveSessionPreviousClose(
+  viewSession: QuoteViewSession,
+  sessionQuote: ExtendedQuote,
+  regular?: QuoteSnapshot,
+) {
+  if (viewSession === 'pre') {
+    return sessionQuote.previousClose ?? regular?.price ?? regular?.previousClose;
+  }
+  return regular?.previousClose ?? sessionQuote.previousClose;
 }
 
 async function fetchTencentQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
@@ -72,23 +144,47 @@ async function fetchTencentQuotes(holdings: Holding[], signal?: AbortSignal): Pr
   return parseTencentQuotes(text, holdings);
 }
 
-async function fetchExtendedUsQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, ExtendedQuote>> {
+async function fetchSessionUsQuotes(
+  holdings: Holding[],
+  viewSession: QuoteViewSession,
+  signal?: AbortSignal,
+): Promise<ExtendedQuotesResponse> {
   const usHoldings = holdings.filter(
     (holding) => holding.market === 'US' && /^[A-Z][A-Z0-9.-]{0,9}\.US$/i.test(holding.symbol),
   );
-  if (!usHoldings.length) return new Map();
+  if (!usHoldings.length) {
+    return { quotes: new Map(), marketSession: getUsMarketSession() };
+  }
 
   const symbols = Array.from(new Set(usHoldings.map((holding) => holding.symbol.toUpperCase())));
   const etfs = Array.from(new Set(
     usHoldings.filter((holding) => holding.type !== '个股').map((holding) => holding.symbol.toUpperCase()),
   ));
-  const params = new URLSearchParams({ symbols: symbols.join(',') });
+  const params = new URLSearchParams({
+    symbols: symbols.join(','),
+    session: viewSession,
+  });
   if (etfs.length) params.set('etfs', etfs.join(','));
 
   const response = await fetch(`/api/extended-quotes?${params.toString()}`, { signal, cache: 'no-store' });
   if (!response.ok) throw new Error(`extended quote request failed: ${response.status}`);
-  const payload = (await response.json()) as { code?: number; data?: { quotes?: ExtendedQuote[] } };
-  return new Map((payload.data?.quotes ?? []).map((quote) => [quote.symbol, quote]));
+  const payload = (await response.json()) as {
+    code?: number;
+    data?: {
+      quotes?: ExtendedQuote[];
+      marketSession?: MarketSession;
+      session?: MarketSession | QuoteSession | null;
+    };
+  };
+  const marketSession = payload.data?.marketSession
+    ?? (payload.data?.session === 'pre' || payload.data?.session === 'regular' || payload.data?.session === 'post' || payload.data?.session === 'closed'
+      ? payload.data.session
+      : getUsMarketSession());
+
+  return {
+    marketSession,
+    quotes: new Map((payload.data?.quotes ?? []).map((quote) => [quote.symbol, quote])),
+  };
 }
 
 function parseTencentQuotes(text: string, holdings: Holding[]): Map<string, QuoteSnapshot> {
@@ -117,7 +213,11 @@ function parseTencentQuotes(text: string, holdings: Holding[]): Map<string, Quot
   return quotes;
 }
 
-async function fetchYahooQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
+async function fetchYahooQuotes(
+  holdings: Holding[],
+  signal?: AbortSignal,
+  viewSession: QuoteViewSession = 'regular',
+): Promise<Map<string, QuoteSnapshot>> {
   const yahooSymbols = new Map(holdings.map((holding) => [holding.symbol, yahooSymbol(holding.symbol)]));
   const symbols = Array.from(yahooSymbols.values()).join(',');
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
@@ -132,13 +232,33 @@ async function fetchYahooQuotes(holdings: Holding[], signal?: AbortSignal): Prom
 
   for (const [localSymbol, remoteSymbol] of yahooSymbols) {
     const item = payload.quoteResponse?.result?.find((quote) => quote.symbol === remoteSymbol);
-    const price = item?.regularMarketPrice ?? item?.postMarketPrice ?? item?.preMarketPrice;
+    if (!item) continue;
+
+    const previousClose = item.regularMarketPreviousClose;
+    let price: number | undefined;
+    let session: QuoteSession | undefined;
+
+    if (viewSession === 'pre' && typeof item.preMarketPrice === 'number') {
+      price = item.preMarketPrice;
+      session = 'pre';
+    } else if (viewSession === 'post' && typeof item.postMarketPrice === 'number') {
+      price = item.postMarketPrice;
+      session = 'post';
+    } else {
+      price = item.regularMarketPrice;
+      session = viewSession === 'regular' ? 'regular' : undefined;
+    }
+
     if (typeof price === 'number' && Number.isFinite(price)) {
+      const change = previousClose && previousClose > 0
+        ? price - previousClose
+        : (session === 'regular' || !session ? item.regularMarketChange : undefined);
       quotes.set(localSymbol, {
         price,
-        name: item?.longName || item?.shortName,
-        change: item?.regularMarketChange,
-        previousClose: item?.regularMarketPreviousClose,
+        name: item.longName || item.shortName,
+        change: Number.isFinite(change) ? change : undefined,
+        previousClose: previousClose && previousClose > 0 ? previousClose : undefined,
+        session,
       });
     }
   }
@@ -167,7 +287,7 @@ export async function fetchSecurityQuote(symbol: string, market: Holding['market
     todayPnl: 0,
     totalPnl: 0,
   };
-  const quotes = await fetchLatestQuotes([holding], signal);
+  const { quotes } = await fetchLatestQuotes([holding], signal, defaultQuoteViewSession());
   const quote = quotes.get(normalized);
   if (!quote) throw new Error('暂未查询到该股票行情');
   return quote;

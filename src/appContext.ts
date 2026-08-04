@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { AccountSnapshot, AggregatedHolding, AiApiConfig, BuyInput, BuyRecord, Currency, Holding, HoldingNewsItem, HoldingNewsStatus, ImportAuditRecord, PortfolioSummary, QuoteSession, QuoteStatus, RiskAlert, RiskAnalysisStatus, SavedSnapshot, SellInput, SellRecord, SnapshotDraft, Tab } from './types';
+import type { AccountSnapshot, AggregatedHolding, AiApiConfig, BuyInput, BuyRecord, Currency, Holding, HoldingNewsItem, HoldingNewsStatus, ImportAuditRecord, MarketSession, PortfolioSummary, QuoteSession, QuoteStatus, QuoteViewSession, RiskAlert, RiskAnalysisStatus, SavedSnapshot, SellInput, SellRecord, SnapshotDraft, Tab } from './types';
 
 export type AppContext = {
   tab: Tab;
@@ -14,6 +14,9 @@ export type AppContext = {
   setConfirmedRows: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   lastRefresh: string;
   quoteStatus: QuoteStatus;
+  quoteViewSession: QuoteViewSession;
+  setQuoteViewSession: (session: QuoteViewSession) => void;
+  marketSession: MarketSession;
   quoteSessions: Record<string, QuoteSession | undefined>;
   refresh: () => Promise<void>;
   holdings: Holding[];

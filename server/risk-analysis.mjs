@@ -342,7 +342,9 @@ function readMarketHistoryQuery(req) {
 function readExtendedQuoteQuery(req) {
   const url = new URL(req.url, 'http://localhost');
   const etfs = new Set(String(url.searchParams.get('etfs') || '').split(',').map((item) => item.trim().toUpperCase()));
-  return String(url.searchParams.get('symbols') || '')
+  const sessionParam = String(url.searchParams.get('session') || 'auto').toLowerCase();
+  const session = ['pre', 'regular', 'post', 'auto'].includes(sessionParam) ? sessionParam : 'auto';
+  const entries = String(url.searchParams.get('symbols') || '')
     .split(',')
     .map((item) => item.trim().toUpperCase())
     .filter((symbol) => /^[A-Z][A-Z0-9.-]{0,9}\.US$/.test(symbol))
@@ -351,6 +353,7 @@ function readExtendedQuoteQuery(req) {
       symbol,
       assetClass: etfs.has(symbol) ? 'etf' : guessUsAssetClass(symbol.replace(/\.US$/, '')),
     }));
+  return { entries, session };
 }
 
 let fearGreedMemoryCache = null;
@@ -1222,8 +1225,8 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && req.url?.startsWith('/api/extended-quotes')) {
     try {
-      const entries = readExtendedQuoteQuery(req);
-      const data = await fetchExtendedQuotes(entries);
+      const { entries, session } = readExtendedQuoteQuery(req);
+      const data = await fetchExtendedQuotes(entries, { session });
       return sendJson(res, 200, { code: 0, data });
     } catch (error) {
       return sendJson(res, 502, { code: 502, message: error instanceof Error ? error.message : 'extended quote fetch failed', data: null });

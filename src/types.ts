@@ -1,7 +1,12 @@
 import type React from 'react';
 
 export type Currency = 'HKD' | 'USD' | 'CNY';
-export type QuoteSession = 'pre' | 'post';
+/** Live US market clock session. */
+export type MarketSession = 'pre' | 'regular' | 'post' | 'closed';
+/** User-selectable quote / PnL view. */
+export type QuoteViewSession = 'pre' | 'regular' | 'post';
+/** Session tag shown on a price (matches the active view when data is session-specific). */
+export type QuoteSession = QuoteViewSession;
 export type Tab = 'overview' | 'holdings' | 'trends' | 'ask' | 'import';
 export type Broker = '盈立证券' | '致富证券' | '星财富' | 'Schwab' | 'US Bancorp Advisors';
 
