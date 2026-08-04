@@ -200,9 +200,7 @@ export function StructurePanel({ context }: { context: AppContext }) {
     [snapshotRows, currency],
   );
 
-  const actionText = gross > 0
-    ? `合计 ${money(gross, currency, context.masked)} · 10分钟刷新`
-    : '暂无持仓';
+  const actionText = gross > 0 ? '10分钟刷新' : '暂无持仓';
 
   return (
     <section className="panel structure-panel">
