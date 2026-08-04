@@ -450,9 +450,11 @@ function DetailRow({
             ? formatReturnUsdFull(row.pnlUsd, masked)
             : formatReturnPct(row.percent, masked)}
           {' · '}
-          {row.qtySod === row.qtyEod
-            ? `${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`
-            : `${row.qtySod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}→${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`}
+          {masked
+            ? '**** 股'
+            : row.qtySod === row.qtyEod
+              ? `${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`
+              : `${row.qtySod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}→${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`}
         </em>
       </div>
     </li>
