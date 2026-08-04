@@ -861,11 +861,12 @@ async function fetchHoldingNews(payload) {
         analysis: analyzeNewsItem(item),
       }));
 
-    const matchedSymbols = new Set(matched.map((item) => item.symbol).filter((symbol) => symbol !== 'MARKET'));
-    const tickerHits = matched.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
+    const matchedSymbols = new Set(selected.map((item) => item.symbol).filter((symbol) => symbol !== 'MARKET'));
+    const tickerHits = selected.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
+    const investingHits = selected.filter((item) => (item.matchedBy || []).every((value) => value !== 'yahoo-ticker' && value !== 'google-ticker') && item.symbol !== 'MARKET').length;
     const source = !matched.length
       ? 'fallback'
-      : tickerHits > 0 && matched.some((item) => item.feed === 'investing')
+      : tickerHits > 0 && investingHits > 0
         ? 'mixed'
         : tickerHits > 0
           ? 'ticker'
@@ -875,7 +876,7 @@ async function fetchHoldingNews(payload) {
       source,
       fetchedAt: new Date().toISOString(),
       summary: matched.length
-        ? `按 ticker 源（Yahoo/Google）+ 持仓关键词：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，共 ${selected.length} 条相关新闻${tickerHits ? `（其中 ${tickerHits} 条来自 ticker 源）` : ''}。`
+        ? `按 ticker 源（Yahoo/Google）+ 持仓关键词：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，展示 ${selected.length} 条${tickerHits ? `（ticker 源 ${tickerHits} 条）` : ''}。`
         : '未命中具体持仓代码或公司名，当前展示市场参考新闻（未挂到任一持仓）。',
       items: selected,
     };
