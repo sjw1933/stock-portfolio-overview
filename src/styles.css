@@ -1716,7 +1716,7 @@ button {
 .table-head,
 .holding-row {
   display: grid;
-  grid-template-columns: minmax(92px, 1.35fr) minmax(80px, 1fr) minmax(74px, 0.9fr) minmax(80px, 1fr) minmax(80px, 1fr);
+  grid-template-columns: minmax(88px, 1.3fr) minmax(72px, 1fr) minmax(68px, 0.85fr) minmax(72px, 0.95fr) minmax(72px, 0.95fr) minmax(64px, 0.75fr);
   gap: 10px;
 }
 
@@ -2797,13 +2797,18 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 
-  .today-pnl-cell {
+  .today-pnl-cell,
+  .holding-weight-cell {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding-top: 9px;
     border-top: 1px dashed #e2e8f0;
+  }
+
+  .holding-weight-cell {
+    padding-top: 8px;
   }
 
   .holding-mobile-label {
@@ -2814,7 +2819,8 @@ button {
     font-weight: 700;
   }
 
-  .today-pnl-values {
+  .today-pnl-values,
+  .holding-weight-values {
     text-align: right;
   }
 
