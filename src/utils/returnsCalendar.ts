@@ -1,4 +1,4 @@
-import type { BuyRecord, Holding, SellRecord } from '../types';
+import type { BuyRecord, Holding, ImportAuditRecord, SellRecord } from '../types';
 import { convert } from './currency';
 import { fetchMarketHistory, type TrendPoint } from './marketHistory';
 
@@ -41,6 +41,8 @@ type SymbolMeta = {
   name: string;
   currency: Holding['currency'];
   currentQty: number;
+  /** First date we have any evidence this symbol was held (trade or snapshot). */
+  knownFrom: string;
 };
 
 type DayTradeCash = {
@@ -51,18 +53,31 @@ type DayTradeCash = {
 /**
  * Economic day P&L in USD:
  * qtyEod * close - qtySod * prevClose - buyCost + sellProceeds
+ *
+ * Important: without a full trade ledger we must NOT backfill current qty onto
+ * the entire market history. Only days on/after each symbol's knownFrom count.
  */
 export async function buildDailyReturns(input: {
   holdings: Holding[];
   buyRecords: BuyRecord[];
   sellRecords: SellRecord[];
+  importLogs?: ImportAuditRecord[];
+  positionsUpdatedAt?: string;
+  savedAt?: string;
   signal?: AbortSignal;
   /** Prefer live mark-to-market for today when available. */
   liveToday?: { date: string; details: ReturnDetailRow[] } | null;
 }): Promise<DailyReturnPoint[]> {
   const activeBuys = input.buyRecords.filter((item) => item.status === 'active');
   const activeSells = input.sellRecords.filter((item) => item.status === 'active');
-  const metas = collectSymbolMetas(input.holdings, activeBuys, activeSells);
+  // Snapshot floor excludes trades: OCR/manual holdings must not inherit another ticker's first buy date.
+  const snapshotKnownFrom = resolveSnapshotKnownFrom({
+    importLogs: input.importLogs ?? [],
+    positionsUpdatedAt: input.positionsUpdatedAt ?? '',
+    savedAt: input.savedAt ?? '',
+  });
+  const metas = collectSymbolMetas(input.holdings, activeBuys, activeSells, snapshotKnownFrom);
+  const portfolioStart = earliestDate(metas.map((item) => item.knownFrom).filter(Boolean)) || localDateKey();
 
   const seriesBySymbol = new Map<string, TrendPoint[]>();
   await Promise.all(metas.map(async (meta) => {
@@ -78,7 +93,8 @@ export async function buildDailyReturns(input: {
   for (const points of seriesBySymbol.values()) {
     for (const point of points) {
       const date = point.date || point.key;
-      if (date) allDates.add(date);
+      // Never invent portfolio P&L before any known holding evidence.
+      if (date && date >= portfolioStart) allDates.add(date);
     }
   }
 
@@ -102,6 +118,9 @@ export async function buildDailyReturns(input: {
 
     const details: ReturnDetailRow[] = [];
     for (const meta of metas) {
+      // No position evidence yet for this ticker on this day.
+      if (date < meta.knownFrom) continue;
+
       const points = seriesBySymbol.get(meta.symbol);
       if (!points?.length) continue;
       const index = points.findIndex((point) => (point.date || point.key) === date);
@@ -111,8 +130,8 @@ export async function buildDailyReturns(input: {
       const prevClose = points[index - 1].close ?? points[index - 1].price;
       if (!(close > 0) || !(prevClose > 0)) continue;
 
-      const qtySod = qtyAtBoundary(meta.symbol, meta.currentQty, activeBuys, activeSells, date, 'sod');
-      const qtyEod = qtyAtBoundary(meta.symbol, meta.currentQty, activeBuys, activeSells, date, 'eod');
+      const qtySod = qtyAtBoundary(meta.symbol, meta.currentQty, activeBuys, activeSells, date, 'sod', meta.knownFrom);
+      const qtyEod = qtyAtBoundary(meta.symbol, meta.currentQty, activeBuys, activeSells, date, 'eod', meta.knownFrom);
       const cash = dayTradeCash(meta.symbol, meta.currency, activeBuys, activeSells, date);
 
       // Convert local currency marks to USD.
@@ -121,7 +140,9 @@ export async function buildDailyReturns(input: {
       const pnlUsd = qtyEod * closeUsd - qtySod * prevCloseUsd - cash.buyCostUsd + cash.sellProceedsUsd;
       const baseUsd = qtySod * prevCloseUsd + cash.buyCostUsd;
 
-      if (Math.abs(pnlUsd) < 0.000001 && qtySod <= 0 && qtyEod <= 0) continue;
+      if (Math.abs(pnlUsd) < 0.000001 && qtySod <= 0 && qtyEod <= 0 && cash.buyCostUsd <= 0 && cash.sellProceedsUsd <= 0) {
+        continue;
+      }
 
       details.push({
         symbol: meta.symbol,
@@ -317,6 +338,7 @@ function collectSymbolMetas(
   holdings: Holding[],
   buys: BuyRecord[],
   sells: SellRecord[],
+  snapshotKnownFrom: string,
 ): SymbolMeta[] {
   const map = new Map<string, SymbolMeta>();
 
@@ -328,6 +350,7 @@ function collectSymbolMetas(
         name: item.name,
         currency: item.currency,
         currentQty: item.qty,
+        knownFrom: snapshotKnownFrom,
       });
     } else {
       current.currentQty += item.qty;
@@ -336,16 +359,59 @@ function collectSymbolMetas(
   }
 
   for (const item of [...buys, ...sells]) {
-    if (map.has(item.symbol)) continue;
-    map.set(item.symbol, {
-      symbol: item.symbol,
-      name: item.name,
-      currency: item.currency,
-      currentQty: 0,
-    });
+    const day = tradeDateKey(item.tradedAt);
+    const existing = map.get(item.symbol);
+    if (!existing) {
+      map.set(item.symbol, {
+        symbol: item.symbol,
+        name: item.name,
+        currency: item.currency,
+        currentQty: 0,
+        knownFrom: day || snapshotKnownFrom,
+      });
+      continue;
+    }
+    if (day && day < existing.knownFrom) existing.knownFrom = day;
   }
 
+  // Pure trade-led symbols already have knownFrom from first trade.
+  // Snapshot-only holdings stay at snapshotKnownFrom (do not invent earlier history).
   return Array.from(map.values()).sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+/**
+ * Earliest date we know holdings from a snapshot/import (not trade reconstruction).
+ * Used only as the floor for tickers that lack their own buy/sell history.
+ */
+function resolveSnapshotKnownFrom(input: {
+  importLogs: ImportAuditRecord[];
+  positionsUpdatedAt: string;
+  savedAt: string;
+}) {
+  const dates: string[] = [];
+  for (const log of input.importLogs) {
+    const day = isoToDateKey(log.savedAt);
+    if (day) dates.push(day);
+  }
+  for (const value of [input.positionsUpdatedAt, input.savedAt]) {
+    const day = isoToDateKey(value);
+    if (day) dates.push(day);
+  }
+  // No import/snapshot timestamp → only today is trustworthy for snapshot holdings.
+  return earliestDate(dates) || localDateKey();
+}
+
+function isoToDateKey(value: string) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return localDateKey(date);
+}
+
+function earliestDate(dates: string[]) {
+  const clean = dates.filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item)).sort();
+  return clean[0] || '';
 }
 
 function tradeDateKey(tradedAt: string) {
@@ -362,7 +428,11 @@ function qtyAtBoundary(
   sells: SellRecord[],
   date: string,
   mode: 'sod' | 'eod',
+  knownFrom: string,
 ) {
+  // Before we know the position existed, force zero (prevents year-long backfill).
+  if (date < knownFrom) return 0;
+
   let qty = currentQty;
   for (const buy of buys) {
     if (buy.symbol !== symbol) continue;

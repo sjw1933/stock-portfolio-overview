@@ -46,8 +46,22 @@ export function ReturnsPage({ context }: { context: AppContext }) {
     [context.holdings],
   );
   const ledgerKey = useMemo(
-    () => `${context.buyRecords.length}:${context.sellRecords.length}:${context.savedSnapshot?.revision ?? 0}`,
-    [context.buyRecords.length, context.sellRecords.length, context.savedSnapshot?.revision],
+    () => [
+      context.buyRecords.length,
+      context.sellRecords.length,
+      context.importLogs.length,
+      context.savedSnapshot?.revision ?? 0,
+      context.savedSnapshot?.positionsUpdatedAt ?? '',
+      context.savedSnapshot?.savedAt ?? '',
+    ].join(':'),
+    [
+      context.buyRecords.length,
+      context.sellRecords.length,
+      context.importLogs.length,
+      context.savedSnapshot?.revision,
+      context.savedSnapshot?.positionsUpdatedAt,
+      context.savedSnapshot?.savedAt,
+    ],
   );
 
   async function loadReturns(signal?: AbortSignal) {
@@ -56,6 +70,9 @@ export function ReturnsPage({ context }: { context: AppContext }) {
       holdings: context.holdings,
       buyRecords: context.buyRecords,
       sellRecords: context.sellRecords,
+      importLogs: context.importLogs,
+      positionsUpdatedAt: context.savedSnapshot?.positionsUpdatedAt,
+      savedAt: context.savedSnapshot?.savedAt,
       signal,
       liveToday: null,
     });
@@ -341,7 +358,9 @@ export function ReturnsPage({ context }: { context: AppContext }) {
           </div>
         )}
 
-        <p className="returns-footnote">按日线与买卖记录估算，今日用实时盈亏；非正式对账单。</p>
+        <p className="returns-footnote">
+          仅从首次买入/导入/快照日起估算（日线 × 可还原仓位）；不会把当前持仓套到更早月份。今日用实时盈亏，非正式对账单。
+        </p>
       </section>
 
       <section className="returns-card returns-detail-card">
