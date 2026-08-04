@@ -1,9 +1,13 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PieChart } from 'lucide-react';
 import { Cell, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { AppContext } from '../appContext';
+import type { AggregatedHolding, Currency } from '../types';
 import { PanelTitle } from './PanelTitle';
 import { convert, money } from '../utils/currency';
+
+/** Structure chart freezes market-value weights between ticks. */
+const structureRefreshMs = 10 * 60 * 1000;
 
 /** Distinct hues so adjacent holdings stay easy to tell apart. */
 const palette = [
@@ -33,6 +37,55 @@ type PieSlice = {
   percent: number;
   color: string;
 };
+
+type StructureSnapshotRow = {
+  symbol: string;
+  name: string;
+  marketValue: number;
+  currency: AggregatedHolding['currency'];
+};
+
+function holdingsStructureKey(holdings: AggregatedHolding[]) {
+  return holdings
+    .map((item) => `${item.symbol}:${item.qty}:${item.currency}`)
+    .sort()
+    .join('|');
+}
+
+function buildSnapshot(holdings: AggregatedHolding[]): StructureSnapshotRow[] {
+  return holdings.map((item) => ({
+    symbol: item.symbol,
+    name: item.name,
+    marketValue: item.marketValue,
+    currency: item.currency,
+  }));
+}
+
+function buildPieData(rows: StructureSnapshotRow[], currency: Currency) {
+  const slices = rows
+    .map((item, index) => {
+      const value = convert(item.marketValue, item.currency, currency);
+      return {
+        key: item.symbol,
+        name: shortSymbol(item.symbol),
+        fullName: item.name,
+        value,
+        percent: 0,
+        color: palette[index % palette.length],
+      };
+    })
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  const total = slices.reduce((sum, item) => sum + item.value, 0);
+  const pieData: PieSlice[] = slices.map((item, index) => ({
+    ...item,
+    percent: total > 0.000001 ? item.value / total : 0,
+    color: palette[index % palette.length],
+  }));
+
+  return { pieData, gross: total };
+}
 
 function PieSliceLabel(props: {
   cx?: number;
@@ -100,43 +153,50 @@ function PieSliceLabel(props: {
   );
 }
 
+function formatStructureTime(ts: number) {
+  return new Date(ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 export function StructurePanel({ context }: { context: AppContext }) {
   const currency = context.currency;
+  const latestHoldingsRef = useRef(context.aggregated);
+  latestHoldingsRef.current = context.aggregated;
 
-  const { pieData, gross } = useMemo(() => {
-    const rows: PieSlice[] = context.aggregated
-      .map((item, index) => {
-        const value = convert(item.marketValue, item.currency, currency);
-        return {
-          key: item.symbol,
-          name: shortSymbol(item.symbol),
-          fullName: item.name,
-          value,
-          percent: 0,
-          color: palette[index % palette.length],
-        };
-      })
-      .filter((item) => item.value > 0)
-      .sort((a, b) => b.value - a.value);
+  const structureKey = useMemo(
+    () => holdingsStructureKey(context.aggregated),
+    [context.aggregated],
+  );
 
-    const total = rows.reduce((sum, item) => sum + item.value, 0);
-    // Re-assign colors after sort so largest slices get the strongest hues first.
-    const withPct = rows.map((item, index) => ({
-      ...item,
-      percent: total > 0.000001 ? item.value / total : 0,
-      color: palette[index % palette.length],
-    }));
+  const [snapshotRows, setSnapshotRows] = useState<StructureSnapshotRow[]>(() => buildSnapshot(context.aggregated));
+  const [snapshotAt, setSnapshotAt] = useState(() => Date.now());
 
-    return { pieData: withPct, gross: total };
-  }, [context.aggregated, currency]);
+  // Immediate refresh when holdings composition changes (import / buy / sell qty).
+  useEffect(() => {
+    setSnapshotRows(buildSnapshot(context.aggregated));
+    setSnapshotAt(Date.now());
+  }, [structureKey]);
+
+  // Timed refresh every 10 minutes from the latest live marks.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSnapshotRows(buildSnapshot(latestHoldingsRef.current));
+      setSnapshotAt(Date.now());
+    }, structureRefreshMs);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const { pieData, gross } = useMemo(
+    () => buildPieData(snapshotRows, currency),
+    [snapshotRows, currency],
+  );
+
+  const actionText = gross > 0
+    ? `合计 ${money(gross, currency, context.masked)} · ${formatStructureTime(snapshotAt)} · 10分钟刷新`
+    : '暂无持仓';
 
   return (
     <section className="panel structure-panel">
-      <PanelTitle
-        icon={PieChart}
-        title="仓位结构"
-        action={gross > 0 ? `持仓合计 ${money(gross, currency, context.masked)}` : '暂无持仓'}
-      />
+      <PanelTitle icon={PieChart} title="仓位结构" action={actionText} />
       <div className="structure-body structure-body-chart-only">
         <div className="pie-wrap pie-wrap-large">
           {pieData.length ? (
