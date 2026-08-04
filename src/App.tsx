@@ -5,6 +5,7 @@ import { PortfolioSummaryCard } from './components/PortfolioSummaryCard';
 import { QuickNewsStrip } from './components/QuickNewsStrip';
 import { OverviewPage } from './pages/OverviewPage';
 import { HoldingsPage } from './pages/HoldingsPage';
+import { ReturnsPage } from './pages/ReturnsPage';
 import { TrendsPage } from './pages/TrendsPage';
 import { ImportPage } from './pages/ImportPage';
 import { AskPage } from './pages/AskPage';
@@ -23,7 +24,7 @@ const dailyRiskAnalysisLimit = 3;
 const riskAnalysisCacheKey = 'gup-risk-analysis-cache-v2';
 const holdingNewsCacheKey = 'gup-holding-news-cache-v5';
 const holdingNewsAiEnabledKey = 'gup-holding-news-ai-enabled-v1';
-const tabs: Tab[] = ['overview', 'holdings', 'trends', 'ask', 'import'];
+const tabs: Tab[] = ['overview', 'holdings', 'returns', 'trends', 'ask', 'import'];
 
 type CachedRiskAnalysis = {
   day: string;
@@ -457,14 +458,15 @@ export function App() {
       <section className={`dashboard-grid dashboard-grid-${tab}`}>
         <div className="primary-column">
           <PortfolioSummaryCard context={context} />
-          {tab !== 'trends' && tab !== 'ask' && <QuickNewsStrip items={newsItems} />}
+          {tab !== 'trends' && tab !== 'ask' && tab !== 'returns' && <QuickNewsStrip items={newsItems} />}
           {tab === 'overview' && <OverviewPage context={context} />}
           {tab === 'holdings' && <HoldingsPage context={context} />}
+          {tab === 'returns' && <ReturnsPage context={context} />}
           {tab === 'trends' && <TrendsPage context={context} />}
           {tab === 'ask' && <AskPage context={context} />}
           {tab === 'import' && <ImportPage context={context} />}
         </div>
-        {tab !== 'trends' && tab !== 'ask' && (
+        {tab !== 'trends' && tab !== 'ask' && tab !== 'returns' && (
           <aside className="fold-sidebar">
             <OverviewPage context={context} sidebar />
           </aside>

@@ -1,9 +1,10 @@
-import { Home, LineChart, MessageCircle, Upload, Wallet } from 'lucide-react';
+import { CalendarDays, Home, LineChart, MessageCircle, Upload, Wallet } from 'lucide-react';
 import type { Tab } from '../types';
 
 const navItems = [
   { key: 'overview' as const, label: '总览', icon: Home },
   { key: 'holdings' as const, label: '持仓', icon: Wallet },
+  { key: 'returns' as const, label: '收益', icon: CalendarDays },
   { key: 'trends' as const, label: '趋势', icon: LineChart },
   { key: 'ask' as const, label: '问询', icon: MessageCircle },
   { key: 'import' as const, label: '导入', icon: Upload },

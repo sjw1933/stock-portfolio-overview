@@ -7,7 +7,7 @@ export type MarketSession = 'pre' | 'regular' | 'post' | 'closed';
 export type QuoteViewSession = 'pre' | 'regular' | 'post';
 /** Session tag shown on a price (matches the active view when data is session-specific). */
 export type QuoteSession = QuoteViewSession;
-export type Tab = 'overview' | 'holdings' | 'trends' | 'ask' | 'import';
+export type Tab = 'overview' | 'holdings' | 'returns' | 'trends' | 'ask' | 'import';
 export type Broker = '盈立证券' | '致富证券' | '星财富' | 'Schwab' | 'US Bancorp Advisors';
 
 export type AiProvider = 'openai' | 'anthropic';
