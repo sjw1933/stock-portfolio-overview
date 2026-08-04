@@ -304,6 +304,12 @@ button {
   gap: 12px;
 }
 
+/* Allow nested horizontal scroll inside grid columns on fold/desktop. */
+.primary-column,
+.holdings-list {
+  min-width: 0;
+}
+
 .dashboard-grid-trends,
 .dashboard-grid-returns {
   grid-template-columns: minmax(0, 1fr);
@@ -1738,10 +1744,35 @@ button {
   }
 }
 
+/* Horizontal scroll on fold/tablet when 6 columns exceed the primary column width. */
+.holdings-table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  margin-inline: -2px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.holdings-table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.holdings-table-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.holdings-table {
+  min-width: 100%;
+}
+
 .table-head,
 .holding-row {
   display: grid;
-  grid-template-columns: minmax(88px, 1.3fr) minmax(72px, 1fr) minmax(68px, 0.85fr) minmax(72px, 0.95fr) minmax(72px, 0.95fr) minmax(64px, 0.75fr);
+  grid-template-columns: minmax(96px, 1.3fr) minmax(78px, 1fr) minmax(72px, 0.9fr) minmax(78px, 0.95fr) minmax(78px, 0.95fr) minmax(72px, 0.8fr);
   gap: 10px;
 }
 
@@ -1755,6 +1786,30 @@ button {
   align-items: center;
   padding: 13px 0;
   border-top: 1px solid #edf1f6;
+}
+
+/* Keep name sticky while swiping columns on wider layouts. */
+@media (min-width: 391px) {
+  .holdings-table {
+    min-width: 680px;
+  }
+
+  .table-head > span:first-child,
+  .holding-row > .holding-name-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: #fff;
+    box-shadow: 6px 0 8px -6px rgb(15 23 42 / 12%);
+  }
+
+  .table-head > span:first-child {
+    padding-right: 6px;
+  }
+
+  .holding-row > .holding-name-cell {
+    padding-right: 6px;
+  }
 }
 
 .holding-row div {
@@ -2836,6 +2891,17 @@ button {
 
   .table-head {
     display: none;
+  }
+
+  .holdings-table {
+    min-width: 0;
+  }
+
+  .table-head > span:first-child,
+  .holding-row > .holding-name-cell {
+    position: static;
+    box-shadow: none;
+    padding-right: 0;
   }
 
   .holding-row {
