@@ -1177,8 +1177,8 @@ button {
 
 .structure-body {
   display: grid;
-  grid-template-columns: minmax(160px, 200px) minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 150px minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
 }
 
@@ -1187,40 +1187,39 @@ button {
 }
 
 .fold-sidebar .pie-wrap {
-  height: 170px;
+  height: 130px;
 }
 
 .pie-wrap {
-  height: 200px;
+  height: 170px;
   min-width: 0;
-}
-
-.structure-empty {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 .structure-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   max-height: 220px;
   overflow: auto;
 }
 
-.structure-list > div {
+.structure-market-block {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.structure-market-block:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.structure-market-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #edf1f6;
 }
 
-.structure-list span {
+.structure-market-head span {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1228,6 +1227,22 @@ button {
   color: #64748b;
   font-size: 13px;
   font-weight: 700;
+}
+
+.structure-market-head b {
+  min-width: 0;
+  text-align: right;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.structure-market-head i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
 }
 
 .structure-pct {
@@ -1238,33 +1253,43 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.structure-list b {
-  min-width: 0;
-  text-align: right;
+.structure-holding-pct {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0 0 0 16px;
+  list-style: none;
+}
+
+.structure-holding-pct li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-  color: #0f172a;
 }
 
-.structure-list i {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
+.structure-holding-pct span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structure-holding-pct em {
   flex: 0 0 auto;
-  border-radius: 50%;
+  color: #0f172a;
+  font-style: normal;
+  font-weight: 800;
 }
 
-.structure-market-foot {
-  display: grid !important;
-  grid-template-columns: 1fr !important;
-  gap: 4px !important;
-  padding-top: 4px;
-  border-bottom: 0 !important;
-}
-
-.structure-market-foot span {
+.structure-holding-empty {
+  margin: 6px 0 0 16px;
   color: #94a3b8;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
