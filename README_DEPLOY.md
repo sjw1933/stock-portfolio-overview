@@ -41,6 +41,14 @@ portfolio.example.com {
         reverse_proxy gup-risk:8791
     }
 
+    handle /api/holding-outlook* {
+        reverse_proxy gup-risk:8791
+    }
+
+    handle /api/extended-quotes* {
+        reverse_proxy gup-risk:8791
+    }
+
     handle /api/market-history* {
         reverse_proxy gup-risk:8791
     }
