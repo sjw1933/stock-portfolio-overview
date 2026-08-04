@@ -847,19 +847,37 @@ async function fetchHoldingNews(payload) {
       feed: 'investing',
     }));
 
-    const selected = (matched.length ? matched : fallbackItems)
-      .sort((a, b) => b.score - a.score || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 18)
-      .map((item, index) => ({
-        id: `${item.symbol}-${index}-${hashText(item.url)}`,
-        symbol: item.symbol,
-        title: item.title.slice(0, 180),
-        source: item.source.slice(0, 40),
-        url: item.url,
-        publishedAt: item.publishedAt,
-        matchedBy: (item.matchedBy || []).slice(0, 6),
-        analysis: analyzeNewsItem(item),
-      }));
+    const ranked = (matched.length ? matched : fallbackItems)
+      .sort((a, b) => b.score - a.score || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    // Fair mix: up to 3 stories per ticker first, then fill remaining slots by score.
+    const selectedRaw = [];
+    const perSymbol = new Map();
+    for (const item of ranked) {
+      const count = perSymbol.get(item.symbol) || 0;
+      if (count >= 3) continue;
+      selectedRaw.push(item);
+      perSymbol.set(item.symbol, count + 1);
+      if (selectedRaw.length >= 18) break;
+    }
+    if (selectedRaw.length < 18) {
+      const used = new Set(selectedRaw.map((item) => item.url));
+      for (const item of ranked) {
+        if (used.has(item.url)) continue;
+        selectedRaw.push(item);
+        used.add(item.url);
+        if (selectedRaw.length >= 18) break;
+      }
+    }
+    const selected = selectedRaw.map((item, index) => ({
+      id: `${item.symbol}-${index}-${hashText(item.url)}`,
+      symbol: item.symbol,
+      title: item.title.slice(0, 180),
+      source: item.source.slice(0, 40),
+      url: item.url,
+      publishedAt: item.publishedAt,
+      matchedBy: (item.matchedBy || []).slice(0, 6),
+      analysis: analyzeNewsItem(item),
+    }));
 
     const matchedSymbols = new Set(selected.map((item) => item.symbol).filter((symbol) => symbol !== 'MARKET'));
     const tickerHits = selected.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
