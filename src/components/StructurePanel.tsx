@@ -87,6 +87,13 @@ function buildPieData(rows: StructureSnapshotRow[], currency: Currency) {
   return { pieData, gross: total };
 }
 
+function formatSlicePercent(percent: number) {
+  const pct = percent * 100;
+  // Keep one decimal for thin slices so they do not round to 0%.
+  if (pct < 5) return pct.toFixed(1);
+  return pct.toFixed(0);
+}
+
 function PieSliceLabel(props: {
   cx?: number;
   cy?: number;
@@ -103,36 +110,46 @@ function PieSliceLabel(props: {
     || midAngle == null
     || outerRadius == null
     || percent == null
+    || percent <= 0
     || !name
   ) {
     return null;
   }
 
-  // Tiny slices: keep the chart clean; tooltip still has full detail.
-  if (percent < 0.035) return null;
-
   const RADIAN = Math.PI / 180;
-  const radius = outerRadius + 16;
+  // Thin slices get a bit more outward room so labels do not sit on the arc.
+  const isThin = percent < 0.05;
+  const radius = outerRadius + (isThin ? 22 : 16);
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   const anchor = x >= cx ? 'start' : 'end';
-  const pct = (percent * 100).toFixed(0);
+  const pct = formatSlicePercent(percent);
   const color = payload?.color || '#0f172a';
+  const textProps = {
+    fill: color,
+    textAnchor: anchor as 'start' | 'end',
+    dominantBaseline: 'central' as const,
+    fontSize: isThin ? 10 : 11,
+    fontWeight: 800 as const,
+    stroke: '#ffffff',
+    strokeWidth: 3,
+    paintOrder: 'stroke' as const,
+  };
+
+  // Compact one-line label for thin slices so leader lines always have text.
+  if (isThin) {
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <text x={x} y={y} {...textProps}>
+          {name} {pct}%
+        </text>
+      </g>
+    );
+  }
 
   return (
     <g style={{ pointerEvents: 'none' }}>
-      <text
-        x={x}
-        y={y - 6}
-        fill={color}
-        textAnchor={anchor}
-        dominantBaseline="central"
-        fontSize={11}
-        fontWeight={800}
-        stroke="#ffffff"
-        strokeWidth={3}
-        paintOrder="stroke"
-      >
+      <text x={x} y={y - 6} {...textProps}>
         {name}
       </text>
       <text
@@ -194,7 +211,7 @@ export function StructurePanel({ context }: { context: AppContext }) {
         <div className="pie-wrap pie-wrap-large">
           {pieData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <RePieChart margin={{ top: 12, right: 28, bottom: 12, left: 28 }}>
+              <RePieChart margin={{ top: 18, right: 36, bottom: 18, left: 36 }}>
                 <Pie
                   data={pieData}
                   dataKey="value"
@@ -202,7 +219,7 @@ export function StructurePanel({ context }: { context: AppContext }) {
                   cx="50%"
                   cy="50%"
                   innerRadius={40}
-                  outerRadius={72}
+                  outerRadius={68}
                   paddingAngle={pieData.length > 1 ? 2.5 : 0}
                   stroke="#ffffff"
                   strokeWidth={2}
@@ -211,6 +228,7 @@ export function StructurePanel({ context }: { context: AppContext }) {
                     strokeWidth: 1,
                   }}
                   label={<PieSliceLabel />}
+                  isAnimationActive={false}
                 >
                   {pieData.map((entry) => (
                     <Cell key={entry.key} fill={entry.color} />
