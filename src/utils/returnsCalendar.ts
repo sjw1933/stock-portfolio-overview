@@ -239,9 +239,9 @@ export function localDateKey(date = new Date()) {
 }
 
 export function monthMatrix(year: number, monthIndex: number) {
-  // monthIndex 0-11; weeks start Monday
+  // monthIndex 0-11; weeks start Sunday (matches retail calendar UIs)
   const first = new Date(year, monthIndex, 1);
-  const firstWeekday = (first.getDay() + 6) % 7;
+  const firstWeekday = first.getDay(); // 0 = Sunday
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const cells: Array<string | null> = [];
   for (let i = 0; i < firstWeekday; i += 1) cells.push(null);
@@ -254,6 +254,32 @@ export function monthMatrix(year: number, monthIndex: number) {
   const weeks: Array<Array<string | null>> = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
+}
+
+/** Compact cell text like +3.77% / -1.33% / 0.00% */
+export function formatReturnPctCell(percent: number | null, masked: boolean) {
+  if (masked) return '****';
+  if (percent == null || !Number.isFinite(percent)) return '0.00%';
+  if (Math.abs(percent) < 0.005) return '0.00%';
+  const prefix = percent > 0 ? '+' : '';
+  return `${prefix}${percent.toFixed(2)}%`;
+}
+
+/** Compact dollar cell text. */
+export function formatReturnUsdCell(amount: number, masked: boolean) {
+  if (masked) return '****';
+  if (Math.abs(amount) < 0.005) return '$0';
+  const prefix = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  const abs = Math.abs(amount);
+  if (abs >= 10000) return `${prefix}${(abs / 1000).toFixed(1)}k`;
+  if (abs >= 1000) return amount < 0 ? `-$${(abs / 1000).toFixed(1)}k` : `+$${(abs / 1000).toFixed(1)}k`;
+  const body = abs.toLocaleString('zh-CN', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  return amount < 0 ? `-$${body}` : amount > 0 ? `+$${body}` : `$${body}`;
+}
+
+export function formatDotDate(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  return date.replace(/-/g, '.');
 }
 
 export function formatReturnUsd(amount: number, masked: boolean) {

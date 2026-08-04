@@ -1,23 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { ArrowDownUp, CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import type { AppContext } from '../appContext';
-import { PanelTitle } from '../components/PanelTitle';
 import {
   aggregateReturns,
   buildDailyReturns,
   buildLiveTodayDetails,
+  formatDotDate,
   formatReturnPct,
-  formatReturnUsd,
+  formatReturnPctCell,
+  formatReturnUsdCell,
   formatReturnUsdFull,
   localDateKey,
   monthMatrix,
   type AggregatedReturnPoint,
   type DailyReturnPoint,
+  type ReturnDetailRow,
   type ReturnGranularity,
   type ReturnUnit,
 } from '../utils/returnsCalendar';
 
-const weekLabels = ['一', '二', '三', '四', '五', '六', '日'];
+const weekLabels = ['日', '一', '二', '三', '四', '五', '六'];
 const granularityOptions: Array<{ key: ReturnGranularity; label: string }> = [
   { key: 'day', label: '日' },
   { key: 'week', label: '周' },
@@ -28,6 +30,7 @@ const granularityOptions: Array<{ key: ReturnGranularity; label: string }> = [
 export function ReturnsPage({ context }: { context: AppContext }) {
   const [granularity, setGranularity] = useState<ReturnGranularity>('day');
   const [unit, setUnit] = useState<ReturnUnit>('usd');
+  const [sortDesc, setSortDesc] = useState(true);
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -54,7 +57,6 @@ export function ReturnsPage({ context }: { context: AppContext }) {
       buyRecords: context.buyRecords,
       sellRecords: context.sellRecords,
       signal,
-      // History path only; live today is patched separately so 10s quotes do not refetch day bars.
       liveToday: null,
     });
     const liveDetails = buildLiveTodayDetails(context.holdings);
@@ -81,7 +83,7 @@ export function ReturnsPage({ context }: { context: AppContext }) {
         setDaily(points);
         setStatus('ready');
         setFetchedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
-        setSelectedKey((current) => current ?? points[points.length - 1]?.date ?? null);
+        setSelectedKey((current) => current ?? points[points.length - 1]?.date ?? localDateKey());
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -90,11 +92,9 @@ export function ReturnsPage({ context }: { context: AppContext }) {
         setErrorText(error instanceof Error ? error.message : '收益日历加载失败');
       });
     return () => controller.abort();
-    // structureKey / ledgerKey capture position and trade changes; ignore quote ticks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey, ledgerKey]);
 
-  // Patch only today's cell when live quotes change.
   const liveTodayKey = useMemo(
     () => context.holdings.map((item) => `${item.symbol}:${item.todayPnl.toFixed(4)}`).join('|'),
     [context.holdings],
@@ -156,25 +156,23 @@ export function ReturnsPage({ context }: { context: AppContext }) {
   );
 
   const periodTotal = useMemo(() => {
-    const pnl = visiblePoints.reduce((sum, item) => sum + item.pnlUsd, 0);
+    const pnlUsd = visiblePoints.reduce((sum, item) => sum + item.pnlUsd, 0);
     const base = visiblePoints[0]?.baseUsd ?? 0;
     const winDays = visiblePoints.reduce((sum, item) => sum + item.winDays, 0);
     const dayCount = visiblePoints.reduce((sum, item) => sum + item.dayCount, 0);
     return {
-      pnl,
-      percent: base > 0.000001 ? (pnl / base) * 100 : null,
+      pnlUsd,
+      percent: base > 0.000001 ? (pnlUsd / base) * 100 : null,
       winDays,
       dayCount,
     };
   }, [visiblePoints]);
 
-  const titleAction = status === 'loading'
-    ? '加载历史行情…'
-    : status === 'error'
-      ? '加载失败'
-      : fetchedAt
-        ? `更新 ${fetchedAt}`
-        : '收益日历';
+  const sortedDetails = useMemo(() => {
+    const rows = selected?.details ? [...selected.details] : [];
+    rows.sort((a, b) => (sortDesc ? b.pnlUsd - a.pnlUsd : a.pnlUsd - b.pnlUsd));
+    return rows;
+  }, [selected, sortDesc]);
 
   function shiftCursor(delta: number) {
     setCursor((current) => {
@@ -186,25 +184,61 @@ export function ReturnsPage({ context }: { context: AppContext }) {
     });
   }
 
+  function displayCell(point: { pnlUsd: number; percent: number | null } | undefined) {
+    if (!point) {
+      return unit === 'pct' ? '0.00%' : '$0';
+    }
+    return unit === 'pct'
+      ? formatReturnPctCell(point.percent, context.masked)
+      : formatReturnUsdCell(point.pnlUsd, context.masked);
+  }
+
   function displayValue(point: { pnlUsd: number; percent: number | null }) {
     return unit === 'pct'
       ? formatReturnPct(point.percent, context.masked)
-      : formatReturnUsd(point.pnlUsd, context.masked);
+      : formatReturnUsdFull(point.pnlUsd, context.masked);
   }
 
+  /** Green profit / red loss (product rule); soft pastel cells like the reference calendar. */
   function toneClass(value: number) {
     if (value > 0.000001) return 'pos';
     if (value < -0.000001) return 'neg';
     return 'flat';
   }
 
+  function refresh() {
+    setStatus('loading');
+    void loadReturns()
+      .then((points) => {
+        setDaily(points);
+        setStatus('ready');
+        setFetchedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
+      })
+      .catch((error: unknown) => {
+        setStatus('error');
+        setErrorText(error instanceof Error ? error.message : '收益日历加载失败');
+      });
+  }
+
   return (
     <div className="page-stack returns-page">
-      <section className="panel returns-panel">
-        <PanelTitle icon={CalendarDays} title="收益日历" action={titleAction} />
+      <section className="returns-card">
+        <header className="returns-card-head">
+          <div>
+            <h2>收益日历</h2>
+            <p>
+              {status === 'loading' && '加载历史行情…'}
+              {status === 'error' && (errorText || '加载失败')}
+              {status === 'ready' && (fetchedAt ? `更新 ${fetchedAt} · 估算` : '估算收益')}
+            </p>
+          </div>
+          <button type="button" className="returns-icon-btn" onClick={refresh} disabled={status === 'loading'} aria-label="刷新">
+            <RefreshCw size={16} />
+          </button>
+        </header>
 
-        <div className="returns-toolbar">
-          <div className="holding-view-tabs compact-tabs" aria-label="收益周期">
+        <div className="returns-controls">
+          <div className="returns-pill-group" aria-label="收益周期">
             {granularityOptions.map((item) => (
               <button
                 key={item.key}
@@ -219,14 +253,14 @@ export function ReturnsPage({ context }: { context: AppContext }) {
               </button>
             ))}
           </div>
-          <div className="holding-view-tabs compact-tabs" aria-label="收益单位">
-            <button type="button" className={unit === 'usd' ? 'active' : ''} onClick={() => setUnit('usd')}>美元</button>
-            <button type="button" className={unit === 'pct' ? 'active' : ''} onClick={() => setUnit('pct')}>百分比</button>
+          <div className="returns-unit-group" aria-label="收益单位">
+            <button type="button" className={unit === 'usd' ? 'active' : ''} onClick={() => setUnit('usd')}>$</button>
+            <button type="button" className={unit === 'pct' ? 'active' : ''} onClick={() => setUnit('pct')}>%</button>
           </div>
         </div>
 
-        <div className="returns-nav">
-          <button type="button" className="icon-button" onClick={() => shiftCursor(-1)} aria-label="上一期">
+        <div className="returns-month-nav">
+          <button type="button" onClick={() => shiftCursor(-1)} aria-label="上一期">
             <ChevronLeft size={18} />
           </button>
           <strong>
@@ -236,45 +270,15 @@ export function ReturnsPage({ context }: { context: AppContext }) {
                 ? '全部年份'
                 : `${cursor.year}年`}
           </strong>
-          <button type="button" className="icon-button" onClick={() => shiftCursor(1)} aria-label="下一期">
+          <button type="button" onClick={() => shiftCursor(1)} aria-label="下一期">
             <ChevronRight size={18} />
-          </button>
-          <button
-            type="button"
-            className="returns-refresh"
-            disabled={status === 'loading'}
-            onClick={() => {
-              setStatus('loading');
-              void loadReturns()
-                .then((points) => {
-                  setDaily(points);
-                  setStatus('ready');
-                  setFetchedAt(new Date().toLocaleTimeString('zh-CN', { hour12: false }));
-                })
-                .catch((error: unknown) => {
-                  setStatus('error');
-                  setErrorText(error instanceof Error ? error.message : '收益日历加载失败');
-                });
-            }}
-          >
-            <RefreshCw size={14} />
-            刷新
           </button>
         </div>
 
-        <div className={`returns-summary ${toneClass(periodTotal.pnl)}`}>
-          <div>
-            <span>本期合计</span>
-            <b>
-              {unit === 'pct'
-                ? formatReturnPct(periodTotal.percent, context.masked)
-                : formatReturnUsdFull(periodTotal.pnl, context.masked)}
-            </b>
-          </div>
-          <div>
-            <span>盈利天数</span>
-            <b>{periodTotal.winDays}/{periodTotal.dayCount || 0}</b>
-          </div>
+        <div className={`returns-strip ${toneClass(periodTotal.pnlUsd)}`}>
+          <span>本期合计</span>
+          <b>{displayValue(periodTotal)}</b>
+          <em>{periodTotal.winDays}/{periodTotal.dayCount || 0} 盈</em>
         </div>
 
         {status === 'error' && <div className="returns-empty">{errorText || '收益日历加载失败'}</div>}
@@ -290,24 +294,23 @@ export function ReturnsPage({ context }: { context: AppContext }) {
                 {week.map((date, dayIndex) => {
                   if (!date) return <div key={`e-${weekIndex}-${dayIndex}`} className="returns-day empty" />;
                   const point = pointByKey.get(date);
-                  const selectedDay = selected?.key === date;
-                  const value = point
-                    ? displayValue(point)
-                    : '';
+                  const value = point?.pnlUsd ?? 0;
+                  const selectedDay = selected?.key === date || selectedKey === date;
                   return (
                     <button
                       key={date}
                       type="button"
                       className={[
                         'returns-day',
-                        point ? toneClass(point.pnlUsd) : 'muted',
+                        toneClass(value),
+                        !point ? 'flat' : '',
                         selectedDay ? 'selected' : '',
                         date === localDateKey() ? 'today' : '',
                       ].filter(Boolean).join(' ')}
                       onClick={() => setSelectedKey(date)}
                     >
                       <em>{Number(date.slice(8))}</em>
-                      <strong>{value || '·'}</strong>
+                      <strong>{displayCell(point)}</strong>
                     </button>
                   );
                 })}
@@ -331,36 +334,47 @@ export function ReturnsPage({ context }: { context: AppContext }) {
                 onClick={() => setSelectedKey(point.key)}
               >
                 <span>{point.label}</span>
-                <b>{displayValue(point)}</b>
+                <b>{displayCell(point)}</b>
                 <em>{point.winDays}/{point.dayCount} 盈</em>
               </button>
             ))}
           </div>
         )}
 
-        <p className="returns-footnote">
-          按日线收盘价与买卖记录估算持仓市值变动（美元）；今日优先用实时今日盈亏。非正式对账单。
-        </p>
+        <p className="returns-footnote">按日线与买卖记录估算，今日用实时盈亏；非正式对账单。</p>
       </section>
 
-      <section className="panel returns-detail-panel">
-        <PanelTitle
-          icon={CalendarDays}
-          title={selected ? detailTitle(selected, granularity) : '收益明细'}
-          action={selected
-            ? (unit === 'pct'
-              ? formatReturnPct(selected.percent, context.masked)
-              : formatReturnUsdFull(selected.pnlUsd, context.masked))
-            : ''}
-        />
+      <section className="returns-card returns-detail-card">
+        <header className="returns-detail-head-row">
+          <h2>
+            {detailTitle(selected, granularity)}
+            {selected && (
+              <span>
+                {' '}
+                (
+                {selected.startDate === selected.endDate
+                  ? formatDotDate(selected.startDate)
+                  : `${formatDotDate(selected.startDate)}-${formatDotDate(selected.endDate)}`}
+                )
+              </span>
+            )}
+          </h2>
+          <button
+            type="button"
+            className="returns-sort-btn"
+            onClick={() => setSortDesc((value) => !value)}
+            aria-label="盈亏排序"
+          >
+            盈亏排序
+            <ArrowDownUp size={14} />
+          </button>
+        </header>
+
         {!selected && <div className="returns-empty">选择上方日期或周期查看明细</div>}
+
         {selected && (
           <>
-            <div className={`returns-detail-head ${toneClass(selected.pnlUsd)}`}>
-              <div>
-                <span>区间</span>
-                <b>{selected.startDate === selected.endDate ? selected.startDate : `${selected.startDate} ~ ${selected.endDate}`}</b>
-              </div>
+            <div className={`returns-detail-total ${toneClass(selected.pnlUsd)}`}>
               <div>
                 <span>收益</span>
                 <b>{formatReturnUsdFull(selected.pnlUsd, context.masked)}</b>
@@ -370,31 +384,16 @@ export function ReturnsPage({ context }: { context: AppContext }) {
                 <b>{formatReturnPct(selected.percent, context.masked)}</b>
               </div>
             </div>
+
             <ul className="returns-detail-list">
-              {selected.details.length === 0 && <li className="returns-empty-row">当日无持仓变动估算</li>}
-              {selected.details.map((row) => (
-                <li key={row.symbol}>
-                  <div className="returns-detail-main">
-                    <b>{row.symbol.replace(/\.US$|\.HK$/i, '')}</b>
-                    <span>{row.name}</span>
-                  </div>
-                  <div className={`returns-detail-values ${toneClass(row.pnlUsd)}`}>
-                    <strong>
-                      {unit === 'pct'
-                        ? formatReturnPct(row.percent, context.masked)
-                        : formatReturnUsdFull(row.pnlUsd, context.masked)}
-                    </strong>
-                    <em>
-                      {unit === 'pct'
-                        ? formatReturnUsdFull(row.pnlUsd, context.masked)
-                        : formatReturnPct(row.percent, context.masked)}
-                      {' · '}
-                      {row.qtySod === row.qtyEod
-                        ? `${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`
-                        : `${row.qtySod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}→${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`}
-                    </em>
-                  </div>
+              {sortedDetails.length === 0 && (
+                <li className="returns-empty-state">
+                  <CalendarDays size={36} strokeWidth={1.5} />
+                  <p>当日暂无持仓收益明细</p>
                 </li>
+              )}
+              {sortedDetails.map((row) => (
+                <DetailRow key={row.symbol} row={row} unit={unit} masked={context.masked} toneClass={toneClass} />
               ))}
             </ul>
           </>
@@ -404,8 +403,46 @@ export function ReturnsPage({ context }: { context: AppContext }) {
   );
 }
 
-function detailTitle(point: AggregatedReturnPoint, granularity: ReturnGranularity) {
-  if (granularity === 'day') return `${point.startDate} 收益明细`;
+function DetailRow({
+  row,
+  unit,
+  masked,
+  toneClass,
+}: {
+  row: ReturnDetailRow;
+  unit: ReturnUnit;
+  masked: boolean;
+  toneClass: (value: number) => string;
+}) {
+  return (
+    <li>
+      <div className="returns-detail-main">
+        <b>{row.symbol.replace(/\.US$|\.HK$/i, '')}</b>
+        <span>{row.name}</span>
+      </div>
+      <div className={`returns-detail-values ${toneClass(row.pnlUsd)}`}>
+        <strong>
+          {unit === 'pct'
+            ? formatReturnPct(row.percent, masked)
+            : formatReturnUsdFull(row.pnlUsd, masked)}
+        </strong>
+        <em>
+          {unit === 'pct'
+            ? formatReturnUsdFull(row.pnlUsd, masked)
+            : formatReturnPct(row.percent, masked)}
+          {' · '}
+          {row.qtySod === row.qtyEod
+            ? `${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`
+            : `${row.qtySod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}→${row.qtyEod.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 股`}
+        </em>
+      </div>
+    </li>
+  );
+}
+
+function detailTitle(point: AggregatedReturnPoint | null, granularity: ReturnGranularity) {
+  if (!point) return '收益明细';
+  if (granularity === 'day') return '当日收益明细';
   if (granularity === 'week') return '当周收益明细';
   if (granularity === 'month') return '当月收益明细';
   return '当年收益明细';
