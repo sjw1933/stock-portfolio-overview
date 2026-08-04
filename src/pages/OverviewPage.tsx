@@ -1,5 +1,6 @@
 import { HoldingList } from '../components/HoldingList';
 import { HoldingNewsBoard } from '../components/HoldingNewsBoard';
+import { HoldingOutlookPanel } from '../components/HoldingOutlookPanel';
 import { StructurePanel } from '../components/StructurePanel';
 import { FearGreedPanel } from '../components/FearGreedPanel';
 import type { AppContext } from '../appContext';
@@ -20,6 +21,7 @@ export function OverviewPage({ context, sidebar = false }: { context: AppContext
       />
       {sidebar && context.tab === 'holdings' && <FearGreedPanel />}
       <StructurePanel context={context} />
+      <HoldingOutlookPanel context={context} compact={sidebar} />
       {!sidebar && <HoldingList context={context} />}
     </div>
   );
