@@ -67,14 +67,74 @@ const investingNewsFeeds = [
   'https://cn.investing.com/rss/news_25.rss',
   'https://cn.investing.com/rss/market_overview.rss',
   'https://cn.investing.com/rss/news_301.rss',
+  'https://cn.investing.com/rss/stock.rss',
+  'https://cn.investing.com/rss/news_14.rss',
 ];
 
+// Weighted aliases only — avoid broad market terms like 美股 / 科技股 / Wall St.
+// weight: 10 = ticker-class, 8 = company name, 5 = product/brand, 3 = weak alias (needs extra support).
 const symbolKeywordMap = {
-  'AAPL.US': ['AAPL', 'Apple', '苹果', '苹果公司', 'iPhone', 'iPad', 'Mac'],
-  'QQQ.US': ['QQQ', 'Nasdaq', 'Nasdaq 100', '纳斯达克', '纳指', '科技股', 'technology stocks', 'tech stocks'],
-  'VOO.US': ['VOO', 'S&P 500', '标普500', '标普', '美股', 'Wall St', 'US stock', 'stock futures'],
-  'SPCX.US': ['SPCX', 'SpaceX', '太空探索', '航天', '商业航天'],
+  'AAPL.US': [
+    { keyword: 'AAPL', weight: 10 },
+    { keyword: 'Apple', weight: 8 },
+    { keyword: '苹果公司', weight: 8 },
+    { keyword: '苹果', weight: 8 },
+    { keyword: 'iPhone', weight: 5 },
+    { keyword: 'iPad', weight: 5 },
+    { keyword: 'MacBook', weight: 5 },
+    { keyword: 'Cook', weight: 3 },
+    { keyword: '库克', weight: 3 },
+  ],
+  'QQQ.US': [
+    { keyword: 'QQQ', weight: 10 },
+    { keyword: 'Invesco QQQ', weight: 10 },
+    { keyword: 'Nasdaq-100', weight: 8 },
+    { keyword: 'Nasdaq 100', weight: 8 },
+    { keyword: '纳斯达克100', weight: 8 },
+    { keyword: '纳指100', weight: 8 },
+    { keyword: '纳指ETF', weight: 8 },
+  ],
+  'VOO.US': [
+    { keyword: 'VOO', weight: 10 },
+    { keyword: 'Vanguard S&P', weight: 8 },
+    { keyword: 'S&P 500', weight: 8 },
+    { keyword: 'S&P500', weight: 8 },
+    { keyword: '标普500', weight: 8 },
+    { keyword: '标普 500', weight: 8 },
+  ],
+  'SPY.US': [
+    { keyword: 'SPY', weight: 10 },
+    { keyword: 'SPDR S&P', weight: 8 },
+    { keyword: 'S&P 500', weight: 5 },
+    { keyword: '标普500', weight: 5 },
+  ],
+  'SMCI.US': [
+    { keyword: 'SMCI', weight: 10 },
+    { keyword: 'Super Micro', weight: 10 },
+    { keyword: 'Supermicro', weight: 10 },
+    { keyword: 'Super Micro Computer', weight: 10 },
+    { keyword: '超微电脑', weight: 10 },
+    { keyword: '超微', weight: 8 },
+  ],
+  'LAES.US': [
+    { keyword: 'LAES', weight: 10 },
+    { keyword: 'SEALSQ', weight: 10 },
+    { keyword: 'SealSQ', weight: 10 },
+  ],
+  'RBLX.US': [
+    { keyword: 'RBLX', weight: 10 },
+    { keyword: 'Roblox', weight: 10 },
+    { keyword: '罗布乐思', weight: 10 },
+  ],
+  'SPCX.US': [
+    { keyword: 'SPCX', weight: 10 },
+    { keyword: 'SpaceX', weight: 8 },
+    { keyword: '太空探索技术', weight: 8 },
+  ],
 };
+
+/** Minimum weighted score to attach a story to a holding (blocks loose theme matches). */
+const newsMinMatchScore = 8;
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -522,28 +582,83 @@ function normalizeNewsDate(value) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
+function cleanHoldingName(name) {
+  return String(name || '')
+    .replace(/ETF.*$/i, '')
+    .replace(/[-–—|].*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function keywordsForHolding(holding) {
-  const baseSymbol = String(holding.symbol || '').replace(/\.(US|HK)$/i, '');
-  return Array.from(new Set([
-    holding.symbol,
-    baseSymbol,
-    holding.name,
-    ...(symbolKeywordMap[holding.symbol] || []),
-  ].map((item) => String(item || '').trim()).filter((item) => item.length >= 2)));
+  const symbol = String(holding.symbol || '').toUpperCase();
+  const baseSymbol = symbol.replace(/\.(US|HK)$/i, '');
+  const cleanedName = cleanHoldingName(holding.name);
+  const mapped = Array.isArray(symbolKeywordMap[symbol]) ? symbolKeywordMap[symbol] : [];
+
+  /** @type {Array<{ keyword: string, weight: number }>} */
+  const entries = [
+    { keyword: symbol, weight: 10 },
+    { keyword: baseSymbol, weight: 10 },
+    ...(cleanedName.length >= 2 ? [{ keyword: cleanedName, weight: 8 }] : []),
+    ...mapped.map((item) => (
+      typeof item === 'string'
+        ? { keyword: item, weight: 5 }
+        : { keyword: String(item?.keyword || ''), weight: Number(item?.weight) || 5 }
+    )),
+  ];
+
+  const seen = new Set();
+  return entries.filter((entry) => {
+    const keyword = String(entry.keyword || '').trim();
+    if (keyword.length < 2) return false;
+    const key = keyword.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** English tickers use token boundaries; CJK / multi-word phrases use plain includes. */
+function haystackMatchesKeyword(haystack, keyword) {
+  const needle = String(keyword || '').trim().toLowerCase();
+  if (needle.length < 2) return false;
+  if (/[\u4e00-\u9fff]/.test(needle) || /\s/.test(needle) || needle.length >= 6) {
+    return haystack.includes(needle);
+  }
+  // Short Latin tokens (tickers): avoid matching inside longer words.
+  const pattern = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(needle)}(?:[^a-z0-9]|$)`, 'i');
+  return pattern.test(haystack);
 }
 
 function scoreNewsItem(item, holding) {
-  const haystack = `${item.title} ${item.url}`.toLowerCase();
+  const haystack = `${item.title || ''} ${item.url || ''}`.toLowerCase();
   const matchedBy = [];
-  for (const keyword of keywordsForHolding(holding)) {
-    if (haystack.includes(keyword.toLowerCase())) matchedBy.push(keyword);
+  let score = 0;
+  let strongHits = 0;
+
+  for (const entry of keywordsForHolding(holding)) {
+    if (!haystackMatchesKeyword(haystack, entry.keyword)) continue;
+    score += entry.weight;
+    matchedBy.push(entry.keyword);
+    if (entry.weight >= 8) strongHits += 1;
   }
-  return { score: matchedBy.length, matchedBy };
+
+  // Weak-only aliases (products / vague brand hits) must not alone bind a story.
+  if (strongHits === 0 && score < newsMinMatchScore) {
+    return { score: 0, matchedBy: [] };
+  }
+
+  return { score, matchedBy };
 }
 
 function normalizeNewsHolding(item) {
   return {
-    symbol: String(item?.symbol || '').slice(0, 24),
+    symbol: String(item?.symbol || '').trim().toUpperCase().slice(0, 24),
     name: String(item?.name || '').slice(0, 40),
     market: String(item?.market || '').slice(0, 8),
     type: String(item?.type || '').slice(0, 16),
@@ -553,6 +668,9 @@ function normalizeNewsHolding(item) {
 async function fetchHoldingNews(payload) {
   const holdings = Array.isArray(payload?.holdings) ? payload.holdings.slice(0, 20).map(normalizeNewsHolding).filter((item) => item.symbol) : [];
   if (!holdings.length) throw new Error('holdings is empty');
+
+  // De-dupe multi-account same symbol so scoring is per ticker.
+  const uniqueHoldings = Array.from(new Map(holdings.map((item) => [item.symbol, item])).values());
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 18000);
@@ -565,18 +683,25 @@ async function fetchHoldingNews(payload) {
     const matched = [];
     for (const item of unique.values()) {
       let best = null;
-      for (const holding of holdings) {
+      for (const holding of uniqueHoldings) {
         const scored = scoreNewsItem(item, holding);
+        if (scored.score < newsMinMatchScore) continue;
         if (!best || scored.score > best.score) best = { holding, ...scored };
       }
-      if (best?.score > 0) {
-        matched.push({ ...item, symbol: best.holding.symbol, matchedBy: best.matchedBy, score: best.score });
+      if (best) {
+        matched.push({
+          ...item,
+          symbol: best.holding.symbol,
+          matchedBy: best.matchedBy,
+          score: best.score,
+        });
       }
     }
 
-    const fallbackItems = Array.from(unique.values()).slice(0, 8).map((item, index) => ({
+    // Fallback is explicitly market-level — never pin random stories onto holdings[0].
+    const fallbackItems = Array.from(unique.values()).slice(0, 8).map((item) => ({
       ...item,
-      symbol: index % 2 === 0 ? 'MARKET' : holdings[0].symbol,
+      symbol: 'MARKET',
       matchedBy: ['market'],
       score: 0,
     }));
@@ -591,16 +716,17 @@ async function fetchHoldingNews(payload) {
         source: item.source.slice(0, 40),
         url: item.url,
         publishedAt: item.publishedAt,
-        matchedBy: item.matchedBy.slice(0, 4),
+        matchedBy: item.matchedBy.slice(0, 6),
         analysis: analyzeNewsItem(item),
       }));
 
+    const matchedSymbols = new Set(matched.map((item) => item.symbol));
     return {
       source: matched.length ? 'investing' : 'fallback',
       fetchedAt: new Date().toISOString(),
       summary: matched.length
-        ? `从英为财情中国版 RSS 抓取并按 ${holdings.length} 支持仓关键词匹配到 ${selected.length} 条相关新闻。`
-        : '英为财情中国版 RSS 暂未命中具体持仓，当前展示中文市场相关新闻作为参考。',
+        ? `按持仓代码/名称加权匹配：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，共 ${selected.length} 条相关新闻。`
+        : '未命中具体持仓代码或公司名，当前展示市场参考新闻（未挂到任一持仓）。',
       items: selected,
     };
   } finally {
