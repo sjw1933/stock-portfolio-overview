@@ -4,6 +4,13 @@
 
 ## 2026-08-04
 
+### 持仓新闻 · Investing.com
+
+- 公开源改为 **www + cn Investing RSS**（官方无公开 API，HTML/JSON 默认 403）
+- 支持环境变量 `INVESTING_SESSION_COOKIE`：粘贴浏览器登录 Investing/Pro 后的 Cookie，尝试拉取标的页新闻
+- 内置常见标的 pair 映射（AAPL/QQQ/VOO/SPY/SMCI/RBLX/LAES 等）
+- 未配置 Cookie 时仍用公开 RSS + Yahoo/Google ticker 源
+
 ### 行情与盈亏
 
 - 支持分别查看 **盘前 / 盘中 / 盘后** 行情与盈亏；非交易时段默认展示当天 **盘中** 口径

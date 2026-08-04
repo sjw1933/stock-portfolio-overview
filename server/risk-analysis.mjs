@@ -63,13 +63,42 @@ const nasdaqSymbols = {
   'VOO.US': { symbol: 'VOO', assetClass: 'etf' },
 };
 
+// Investing.com has no public API (official support). Public HTML/API is Cloudflare-blocked (403).
+// What works without login: RSS on www/cn. Optional Pro session cookie enables pair-level news.
+const investingSessionCookie = String(process.env.INVESTING_SESSION_COOKIE || '').trim();
 const investingNewsFeeds = [
+  // English site
+  'https://www.investing.com/rss/news.rss',
+  'https://www.investing.com/rss/news_25.rss',
+  'https://www.investing.com/rss/news_14.rss',
+  'https://www.investing.com/rss/stock.rss',
+  'https://www.investing.com/rss/news_301.rss',
+  'https://www.investing.com/rss/market_overview.rss',
+  'https://www.investing.com/rss/news_285.rss',
+  // Chinese site
   'https://cn.investing.com/rss/news_25.rss',
   'https://cn.investing.com/rss/market_overview.rss',
   'https://cn.investing.com/rss/news_301.rss',
   'https://cn.investing.com/rss/stock.rss',
   'https://cn.investing.com/rss/news_14.rss',
 ];
+
+/** Local symbol -> Investing pair metadata for instrument news (when session cookie is set). */
+const investingPairMap = {
+  'AAPL.US': { pairId: 6408, slug: 'apple-computer-inc', title: 'Apple' },
+  'QQQ.US': { pairId: 15114, slug: 'powershares-qqqq', title: 'Invesco QQQ' },
+  'VOO.US': { pairId: 38272, slug: 'vanguard-s-p-500-etf', title: 'Vanguard S&P 500' },
+  'SPY.US': { pairId: 525, slug: 'spdr-s-p-500', title: 'SPDR S&P 500' },
+  'SMCI.US': { pairId: 20324, slug: 'super-micro-computer', title: 'Super Micro' },
+  'RBLX.US': { pairId: 1176950, slug: 'roblox', title: 'Roblox' },
+  'LAES.US': { pairId: 1202474, slug: 'sealsq', title: 'SEALSQ' },
+  'TSLA.US': { pairId: 13994, slug: 'tesla-motors', title: 'Tesla' },
+  'NVDA.US': { pairId: 6497, slug: 'nvidia-corp', title: 'NVIDIA' },
+  'MSFT.US': { pairId: 10124, slug: 'microsoft-corp', title: 'Microsoft' },
+  'AMZN.US': { pairId: 6435, slug: 'amazon-com-inc', title: 'Amazon' },
+  'META.US': { pairId: 26490, slug: 'facebook-inc', title: 'Meta' },
+  'GOOGL.US': { pairId: 6369, slug: 'google-inc', title: 'Alphabet' },
+};
 
 // Weighted aliases only — avoid broad market terms like 美股 / 科技股 / Wall St.
 // weight: 10 = ticker-class, 8 = company name, 5 = product/brand, 3 = weak alias (needs extra support).
@@ -534,10 +563,23 @@ async function writeFearGreedCache(data) {
   await rename(tempFile, fearGreedCacheFile);
 }
 
-async function fetchText(url, signal) {
+function investingRequestHeaders(extra = {}) {
+  const headers = {
+    accept: 'application/rss+xml, application/xml, text/xml, text/html;q=0.9, application/json;q=0.8, */*;q=0.5',
+    'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    referer: 'https://www.investing.com/',
+    origin: 'https://www.investing.com',
+    ...extra,
+  };
+  if (investingSessionCookie) headers.cookie = investingSessionCookie;
+  return headers;
+}
+
+async function fetchText(url, signal, headers) {
   const response = await fetch(url, {
     signal,
-    headers: {
+    headers: headers || {
       accept: 'application/rss+xml, application/xml, text/xml, text/html;q=0.8, */*;q=0.5',
       'accept-language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
@@ -545,6 +587,160 @@ async function fetchText(url, signal) {
   });
   if (!response.ok) throw new Error(`news feed HTTP ${response.status}`);
   return response.text();
+}
+
+function parseInvestingHtmlNews(html, holding, pairMeta) {
+  const items = [];
+  const seen = new Set();
+  // Article cards / list anchors on instrument news pages.
+  const patterns = [
+    /<a[^>]+href="(https?:\/\/(?:www|cn)\.investing\.com\/news\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+    /<a[^>]+href="(\/news\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+  ];
+  for (const pattern of patterns) {
+    let match = pattern.exec(html);
+    while (match) {
+      const href = match[1].startsWith('http') ? match[1] : `https://www.investing.com${match[1]}`;
+      const title = decodeXml(String(match[2] || '').replace(/<[^>]+>/g, ' ')).trim();
+      if (
+        title.length >= 12
+        && !seen.has(href)
+        && !/pro\/pricing|sign-up|login|register/i.test(href)
+      ) {
+        seen.add(href);
+        items.push({
+          title: title.slice(0, 180),
+          url: href,
+          source: 'Investing.com',
+          description: '',
+          publishedAt: new Date().toISOString(),
+          feed: 'investing-pair',
+          boundHolding: holding,
+          pairId: pairMeta?.pairId,
+        });
+      }
+      if (items.length >= 8) break;
+      match = pattern.exec(html);
+    }
+    if (items.length >= 8) break;
+  }
+  return items;
+}
+
+function parseInvestingJsonNews(payload, holding) {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.news)
+        ? payload.news
+        : Array.isArray(payload?.data?.news)
+          ? payload.data.news
+          : [];
+  return rows.slice(0, 8).flatMap((row) => {
+    const title = String(row?.title || row?.headline || row?.name || '').trim();
+    const path = String(row?.link || row?.url || row?.news_link || row?.href || '').trim();
+    if (!title || !path) return [];
+    const url = path.startsWith('http') ? path : `https://www.investing.com${path.startsWith('/') ? '' : '/'}${path}`;
+    const publishedAt = normalizeNewsDate(row?.date || row?.published || row?.created || row?.timestamp);
+    return [{
+      title: title.slice(0, 180),
+      url,
+      source: 'Investing.com',
+      description: String(row?.body || row?.summary || '').slice(0, 400),
+      publishedAt,
+      feed: 'investing-pair',
+      boundHolding: holding,
+    }];
+  });
+}
+
+async function fetchInvestingPairNewsForHolding(holding, signal) {
+  const pairMeta = investingPairMap[holding.symbol];
+  if (!pairMeta || !investingSessionCookie) return [];
+
+  const attempts = [
+    async () => {
+      // Common internal endpoint used by instrument news tabs.
+      const url = `https://www.investing.com/equities/Service/MoreNews`;
+      const body = new URLSearchParams({
+        pairID: String(pairMeta.pairId),
+        page: '1',
+      });
+      const response = await fetch(url, {
+        method: 'POST',
+        signal,
+        headers: investingRequestHeaders({
+          'content-type': 'application/x-www-form-urlencoded',
+          'x-requested-with': 'XMLHttpRequest',
+        }),
+        body,
+      });
+      if (!response.ok) throw new Error(`MoreNews HTTP ${response.status}`);
+      const text = await response.text();
+      try {
+        return parseInvestingJsonNews(JSON.parse(text), holding);
+      } catch {
+        return parseInvestingHtmlNews(text, holding, pairMeta);
+      }
+    },
+    async () => {
+      const url = `https://api.investing.com/api/news/v2/get-news-by-pair?pair-ID=${pairMeta.pairId}&page=0&rows=10`;
+      const response = await fetch(url, {
+        signal,
+        headers: investingRequestHeaders({ accept: 'application/json' }),
+      });
+      if (!response.ok) throw new Error(`pair-news HTTP ${response.status}`);
+      return parseInvestingJsonNews(await response.json(), holding);
+    },
+    async () => {
+      const url = `https://www.investing.com/equities/${pairMeta.slug}-news`;
+      const html = await fetchText(url, signal, investingRequestHeaders());
+      return parseInvestingHtmlNews(html, holding, pairMeta);
+    },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const items = await attempt();
+      if (items.length) return items;
+    } catch {
+      // Try next strategy.
+    }
+  }
+  return [];
+}
+
+async function fetchInvestingBoundNews(holdings, signal) {
+  if (!investingSessionCookie) return [];
+  const targets = holdings.filter((holding) => investingPairMap[holding.symbol]).slice(0, 10);
+  const bound = [];
+  for (let index = 0; index < targets.length; index += 2) {
+    if (signal?.aborted) break;
+    const chunk = targets.slice(index, index + 2);
+    const results = await Promise.allSettled(chunk.map((holding) => fetchInvestingPairNewsForHolding(holding, signal)));
+    for (const result of results) {
+      if (result.status === 'fulfilled') bound.push(...result.value);
+    }
+  }
+  return bound;
+}
+
+function attachInvestingPairItem(item) {
+  const holding = item.boundHolding;
+  if (!holding?.symbol) return null;
+  const base = yahooNewsTicker(holding.symbol) || holding.symbol.replace(/\.(US|HK)$/i, '');
+  return {
+    title: item.title,
+    url: item.url,
+    source: item.source || 'Investing.com',
+    publishedAt: item.publishedAt,
+    description: item.description || '',
+    symbol: holding.symbol,
+    matchedBy: [base, 'investing-pair', holding.symbol],
+    score: 18,
+    feed: 'investing-pair',
+  };
 }
 
 function decodeXml(text) {
@@ -805,11 +1001,14 @@ async function fetchHoldingNews(payload) {
   const uniqueHoldings = Array.from(new Map(holdings.map((item) => [item.symbol, item])).values());
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 22000);
+  const timeout = setTimeout(() => controller.abort(), 26000);
   try {
-    const [tickerBound, generalResults] = await Promise.all([
+    const [investingBound, tickerBound, generalResults] = await Promise.all([
+      fetchInvestingBoundNews(uniqueHoldings, controller.signal).catch(() => []),
       fetchTickerBoundNews(uniqueHoldings, controller.signal).catch(() => []),
-      Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal))),
+      Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal, investingRequestHeaders({
+        accept: 'application/rss+xml, application/xml, text/xml, */*',
+      })))),
     ]);
 
     const generalItems = generalResults.flatMap((result) => (
@@ -821,7 +1020,15 @@ async function fetchHoldingNews(payload) {
     const matched = [];
     const seenUrls = new Set();
 
-    // 1) Ticker-bound Yahoo / Google feeds (primary association).
+    // 1) Investing.com instrument news (Pro/session cookie unlocks pair pages).
+    for (const item of investingBound) {
+      const attached = attachInvestingPairItem(item);
+      if (!attached || seenUrls.has(attached.url)) continue;
+      seenUrls.add(attached.url);
+      matched.push(attached);
+    }
+
+    // 2) Ticker-bound Yahoo / Google feeds.
     for (const item of tickerBound) {
       const attached = attachTickerFeedItem(item);
       if (!attached || seenUrls.has(attached.url)) continue;
@@ -829,20 +1036,24 @@ async function fetchHoldingNews(payload) {
       matched.push(attached);
     }
 
-    // 2) General Investing RSS with strict keyword match (secondary).
+    // 3) Investing EN/CN RSS with strict keyword match.
     for (const item of generalItems) {
       if (seenUrls.has(item.url)) continue;
       const attached = matchGeneralFeedItem(item, uniqueHoldings);
       if (!attached) continue;
       seenUrls.add(attached.url);
-      matched.push(attached);
+      matched.push({
+        ...attached,
+        score: attached.score + 2, // slight preference for Investing RSS hits
+        matchedBy: Array.from(new Set([...(attached.matchedBy || []), 'investing-rss'])).slice(0, 6),
+      });
     }
 
     // Fallback is explicitly market-level — never pin random stories onto holdings[0].
     const fallbackItems = generalItems.slice(0, 8).map((item) => ({
       ...item,
       symbol: 'MARKET',
-      matchedBy: ['market'],
+      matchedBy: ['market', 'investing-rss'],
       score: 0,
       feed: 'investing',
     }));
@@ -880,22 +1091,29 @@ async function fetchHoldingNews(payload) {
     }));
 
     const matchedSymbols = new Set(selected.map((item) => item.symbol).filter((symbol) => symbol !== 'MARKET'));
+    const investingPairHits = selected.filter((item) => (item.matchedBy || []).includes('investing-pair')).length;
+    const investingRssHits = selected.filter((item) => (item.matchedBy || []).includes('investing-rss') || String(item.source || '').includes('Investing')).length;
     const tickerHits = selected.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
-    const investingHits = selected.filter((item) => (item.matchedBy || []).every((value) => value !== 'yahoo-ticker' && value !== 'google-ticker') && item.symbol !== 'MARKET').length;
     const source = !matched.length
       ? 'fallback'
-      : tickerHits > 0 && investingHits > 0
-        ? 'mixed'
-        : tickerHits > 0
-          ? 'ticker'
-          : 'investing';
+      : investingPairHits > 0
+        ? 'investing'
+        : tickerHits > 0 && investingRssHits > 0
+          ? 'mixed'
+          : tickerHits > 0
+            ? 'ticker'
+            : 'investing';
+
+    const cookieHint = investingSessionCookie
+      ? (investingPairHits ? `Investing 标的新闻 ${investingPairHits} 条` : '已配置 Investing Cookie，但标的页暂未取到文章')
+      : '未配置 INVESTING_SESSION_COOKIE，Investing 仅用公开 RSS';
 
     return {
       source,
       fetchedAt: new Date().toISOString(),
       summary: matched.length
-        ? `按 ticker 源（Yahoo/Google）+ 持仓关键词：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，展示 ${selected.length} 条${tickerHits ? `（ticker 源 ${tickerHits} 条）` : ''}。`
-        : '未命中具体持仓代码或公司名，当前展示市场参考新闻（未挂到任一持仓）。',
+        ? `新闻源：Investing.com + Yahoo/Google。${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，展示 ${selected.length} 条（${cookieHint}${tickerHits ? `，其它 ticker 源 ${tickerHits} 条` : ''}）。`
+        : `未命中具体持仓。${cookieHint}。当前展示 Investing 市场参考新闻。`,
       items: selected,
     };
   } finally {

@@ -7,7 +7,7 @@ const newsExpandedKey = 'gup-holding-news-expanded-v1';
 const statusLabel: Record<HoldingNewsStatus, string> = {
   idle: '待加载',
   loading: '抓取中',
-  live: 'Ticker 新闻',
+  live: 'Investing / Ticker',
   fallback: '市场新闻',
   error: '抓取失败',
 };
