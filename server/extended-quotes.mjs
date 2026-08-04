@@ -36,14 +36,19 @@ export function getUsMarketSession(now = new Date()) {
 
 /**
  * @param {Array<{ symbol: string, assetClass: string }>} entries
- * @param {{ now?: Date, session?: 'pre' | 'regular' | 'post' | 'auto' }} [options]
+ * @param {{ now?: Date, session?: 'pre' | 'regular' | 'post' | 'auto' | 'all' }} [options]
  */
 export async function fetchExtendedQuotes(entries, options = {}) {
   const now = options.now ?? new Date();
   const marketSession = getUsMarketSession(now);
   const fetchedAt = now.toISOString();
-  const session = resolveRequestedSession(options.session, marketSession);
+  const requested = options.session || 'auto';
 
+  if (requested === 'all') {
+    return fetchAllSessionQuotes(entries, now, marketSession, fetchedAt);
+  }
+
+  const session = resolveRequestedSession(requested, marketSession);
   if (!session) {
     return { session: marketSession, marketSession, requestedSession: null, fetchedAt, quotes: [] };
   }
@@ -63,6 +68,78 @@ export async function fetchExtendedQuotes(entries, options = {}) {
   }
 
   return { session, marketSession, requestedSession: session, fetchedAt, quotes };
+}
+
+async function fetchAllSessionQuotes(entries, now, marketSession, fetchedAt) {
+  const marketDate = marketDateFormatter.format(now);
+  const uniqueEntries = Array.from(new Map(entries.map((entry) => [entry.symbol, entry])).values()).slice(0, 30);
+  const quotesBySession = { pre: [], regular: [], post: [] };
+
+  for (let index = 0; index < uniqueEntries.length; index += 4) {
+    const chunk = uniqueEntries.slice(index, index + 4);
+    const results = await Promise.allSettled(
+      chunk.map((entry) => fetchAllSessionsForEntry(entry, marketDate, now)),
+    );
+    for (const result of results) {
+      if (result.status !== 'fulfilled' || !result.value) continue;
+      for (const session of ['pre', 'regular', 'post']) {
+        if (result.value[session]) quotesBySession[session].push(result.value[session]);
+      }
+    }
+  }
+
+  const liveSession = marketSession === 'pre' || marketSession === 'post' || marketSession === 'regular'
+    ? marketSession
+    : 'regular';
+
+  return {
+    session: 'all',
+    marketSession,
+    requestedSession: 'all',
+    fetchedAt,
+    quotes: quotesBySession[liveSession] || [],
+    quotesBySession,
+  };
+}
+
+async function fetchAllSessionsForEntry(entry, marketDate, now) {
+  const cacheKey = `${marketDate}:all:${entry.symbol}:${entry.assetClass}`;
+  const cached = quoteCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.quote;
+
+  /** @type {Record<string, any>} */
+  const bySession = {};
+
+  // Live extended hours: prefer Nasdaq for the active pre/post tape.
+  const live = getUsMarketSession(now);
+  if (live === 'pre' || live === 'post') {
+    try {
+      const nasdaqQuote = await fetchNasdaqExtendedQuote(entry, live, marketDate);
+      if (nasdaqQuote) bySession[live] = nasdaqQuote;
+    } catch {
+      // Yahoo chart below still covers pre/regular/post.
+    }
+  }
+
+  try {
+    const ticker = entry.symbol.replace(/\.US$/i, '');
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d&includePrePost=true`;
+    const payload = await fetchJson(url, {
+      accept: 'application/json, text/plain, */*',
+      'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+    });
+    for (const session of ['pre', 'regular', 'post']) {
+      if (bySession[session]) continue;
+      const quote = parseYahooExtendedPayload(payload, entry.symbol, session, now);
+      if (quote) bySession[session] = quote;
+    }
+  } catch {
+    // Leave partial session map if Yahoo fails.
+  }
+
+  const value = Object.keys(bySession).length ? bySession : null;
+  quoteCache.set(cacheKey, { quote: value, expiresAt: Date.now() + cacheTtlMs });
+  return value;
 }
 
 function resolveRequestedSession(requested, marketSession) {
@@ -178,17 +255,11 @@ export function parseYahooExtendedPayload(payload, symbol, session, now = new Da
   const fromBars = pickLastBarInPeriod(timestamps, closes, period, now);
   if (!fromBars) return null;
 
-  // Premarket often still lists regularMarketPrice as the prior close baseline.
-  const previousClose = session === 'pre'
-    ? (Number.isFinite(Number(meta?.regularMarketPrice)) && Number(meta.regularMarketPrice) > 0
-      ? Number(meta.regularMarketPrice)
-      : baseline)
-    : baseline;
-
+  // Day baseline is prior close so today PnL and total session mark are consistent.
   return {
     symbol,
     price: fromBars.price,
-    previousClose,
+    previousClose: baseline,
     session,
     updatedAt: fromBars.updatedAt,
     source: 'yahoo',

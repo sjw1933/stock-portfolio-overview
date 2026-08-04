@@ -170,7 +170,8 @@ export function App() {
         viewSession,
       );
       setMarketSession(nextMarketSession);
-      setHoldings((current) => applyQuotes(current, quotes));
+      // Always reprice from snapshot holdings so session marks recompute total PnL/NAV cleanly.
+      setHoldings(applyQuotes(baseHoldings, quotes));
       setQuoteSessions(Object.fromEntries(
         Array.from(quotes.entries())
           .filter(([, quote]) => quote.session)

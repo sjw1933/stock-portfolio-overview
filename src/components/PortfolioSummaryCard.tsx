@@ -27,14 +27,20 @@ export function PortfolioSummaryCard({ context }: { context: AppContext }) {
     post: '当前美股盘后',
     closed: '当前非交易时段，默认盘中',
   }[context.marketSession];
+  const sessionSuffix = context.quoteViewSession === 'regular' ? '' : `（${viewLabel}）`;
   const todayReturnLabel = context.quoteViewSession === 'regular' ? '今日收益' : `${viewLabel}收益`;
   const todayPnlLabel = context.quoteViewSession === 'regular' ? '今日浮动盈亏' : `${viewLabel}浮动盈亏`;
+  const totalReturnLabel = `总收益（估算）${sessionSuffix}`;
+  const holdingPnlLabel = `持仓收益${sessionSuffix}`;
+  const navLabel = context.quoteViewSession === 'regular'
+    ? `总资产净值 · ${currencyLabel}`
+    : `总资产净值（${viewLabel}） · ${currencyLabel}`;
 
   return (
     <section className="hero-summary">
       <div className="hero-row">
         <div>
-          <p className="muted">总资产净值 · {currencyLabel}</p>
+          <p className="muted">{navLabel}</p>
           <strong>{money(context.summary.total, currency, context.masked)}</strong>
         </div>
         <div className="hero-row-actions">
@@ -56,7 +62,7 @@ export function PortfolioSummaryCard({ context }: { context: AppContext }) {
       <div className="metric-rows">
         <div className="metric-row metric-row-primary">
           <Metric label={todayReturnLabel} value={signed(context.summary.todayReturn, currency, context.masked)} positive={context.summary.todayReturn >= 0} />
-          <Metric label="总收益（估算）" value={signed(context.summary.totalReturn, currency, context.masked)} positive={context.summary.totalReturn >= 0} />
+          <Metric label={totalReturnLabel} value={signed(context.summary.totalReturn, currency, context.masked)} positive={context.summary.totalReturn >= 0} />
           <Metric
             label="剩余资产（估算）"
             value={context.summary.cashComplete ? money(context.summary.cash, currency, context.masked) : '--'}
@@ -65,7 +71,7 @@ export function PortfolioSummaryCard({ context }: { context: AppContext }) {
         </div>
         <div className="metric-row metric-row-secondary">
           <Metric label={todayPnlLabel} value={signed(context.summary.todayPnl, currency, context.masked)} positive={context.summary.todayPnl >= 0} />
-          <Metric label="持仓收益" value={signed(context.summary.totalPnl, currency, context.masked)} positive={context.summary.totalPnl >= 0} />
+          <Metric label={holdingPnlLabel} value={signed(context.summary.totalPnl, currency, context.masked)} positive={context.summary.totalPnl >= 0} />
           <Metric label="已实现收益（估算）" value={signed(context.summary.realizedPnl, currency, context.masked)} positive={context.summary.realizedPnl >= 0} />
           <Metric label="持仓成本" value={money(context.summary.cost, currency, context.masked)} />
         </div>

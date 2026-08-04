@@ -343,7 +343,7 @@ function readExtendedQuoteQuery(req) {
   const url = new URL(req.url, 'http://localhost');
   const etfs = new Set(String(url.searchParams.get('etfs') || '').split(',').map((item) => item.trim().toUpperCase()));
   const sessionParam = String(url.searchParams.get('session') || 'auto').toLowerCase();
-  const session = ['pre', 'regular', 'post', 'auto'].includes(sessionParam) ? sessionParam : 'auto';
+  const session = ['pre', 'regular', 'post', 'auto', 'all'].includes(sessionParam) ? sessionParam : 'auto';
   const entries = String(url.searchParams.get('symbols') || '')
     .split(',')
     .map((item) => item.trim().toUpperCase())

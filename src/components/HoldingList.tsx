@@ -8,6 +8,7 @@ export function HoldingList({ context, limit }: { context: AppContext; limit?: n
   const rows = limit ? context.aggregated.slice(0, limit) : context.aggregated;
   const viewLabel = quoteViewSessionLabel(context.quoteViewSession);
   const todayColumnLabel = context.quoteViewSession === 'regular' ? '今日盈亏' : `${viewLabel}盈亏`;
+  const totalColumnLabel = context.quoteViewSession === 'regular' ? '盈亏' : `${viewLabel}盈亏`;
 
   return (
     <section className="panel holdings-list">
@@ -16,7 +17,7 @@ export function HoldingList({ context, limit }: { context: AppContext; limit?: n
         <span>名称/代码</span>
         <span>市值/数量</span>
         <span>现价/成本</span>
-        <span>盈亏</span>
+        <span>{totalColumnLabel}</span>
         <span>{todayColumnLabel}</span>
       </div>
       {!rows.length && (

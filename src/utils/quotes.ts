@@ -28,9 +28,10 @@ type ExtendedQuote = {
   updatedAt?: string;
 };
 
-type ExtendedQuotesResponse = {
-  quotes: Map<string, ExtendedQuote>;
-  marketSession: MarketSession;
+type SessionQuoteMaps = {
+  pre: Map<string, ExtendedQuote>;
+  regular: Map<string, ExtendedQuote>;
+  post: Map<string, ExtendedQuote>;
 };
 
 const marketClockFormatter = new Intl.DateTimeFormat('en-US', {
@@ -71,43 +72,20 @@ export async function fetchLatestQuotes(
   viewSession: QuoteViewSession = 'regular',
 ): Promise<{ quotes: Map<string, QuoteSnapshot>; marketSession: MarketSession }> {
   const localMarketSession = getUsMarketSession();
-  const needsSessionQuotes = viewSession === 'pre'
-    || viewSession === 'post'
-    || (viewSession === 'regular' && (localMarketSession === 'post' || localMarketSession === 'closed'));
-
-  const [regularResult, sessionResult] = await Promise.allSettled([
+  const [regularResult, multiResult] = await Promise.allSettled([
     fetchTencentQuotes(holdings, signal),
-    needsSessionQuotes
-      ? fetchSessionUsQuotes(holdings, viewSession, signal)
-      : Promise.resolve({ quotes: new Map<string, ExtendedQuote>(), marketSession: localMarketSession }),
+    fetchAllSessionUsQuotes(holdings, signal),
   ]);
 
-  const quotes = regularResult.status === 'fulfilled' ? regularResult.value : new Map<string, QuoteSnapshot>();
-  const marketSession = sessionResult.status === 'fulfilled'
-    ? sessionResult.value.marketSession
+  const baseQuotes = regularResult.status === 'fulfilled' ? regularResult.value : new Map<string, QuoteSnapshot>();
+  const marketSession = multiResult.status === 'fulfilled'
+    ? multiResult.value.marketSession
     : localMarketSession;
+  const sessionMaps = multiResult.status === 'fulfilled'
+    ? multiResult.value.quotesBySession
+    : emptySessionMaps();
 
-  if (sessionResult.status === 'fulfilled') {
-    for (const [symbol, sessionQuote] of sessionResult.value.quotes) {
-      const regular = quotes.get(symbol);
-      const previousClose = resolveSessionPreviousClose(viewSession, sessionQuote, regular);
-      quotes.set(symbol, {
-        ...regular,
-        price: sessionQuote.price,
-        previousClose,
-        change: previousClose ? sessionQuote.price - previousClose : undefined,
-        session: viewSession,
-        updatedAt: sessionQuote.updatedAt,
-      });
-    }
-  }
-
-  // Keep a consistent session tag on US quotes so the UI can show 盘前/盘中/盘后.
-  for (const [symbol, quote] of quotes) {
-    if (/\.US$/i.test(symbol) && !quote.session) {
-      quotes.set(symbol, { ...quote, session: viewSession });
-    }
-  }
+  const quotes = buildViewQuotes(baseQuotes, sessionMaps, viewSession);
 
   if (quotes.size === 0) {
     const fallback = await fetchYahooQuotes(holdings, signal, viewSession);
@@ -117,15 +95,90 @@ export async function fetchLatestQuotes(
   return { quotes, marketSession };
 }
 
+function emptySessionMaps(): SessionQuoteMaps {
+  return {
+    pre: new Map(),
+    regular: new Map(),
+    post: new Map(),
+  };
+}
+
+/**
+ * Build the quote map for the selected session.
+ * Mark price (and therefore total PnL / market value) always follows the session price.
+ * Today change is session price vs prior close when available.
+ */
+function buildViewQuotes(
+  baseQuotes: Map<string, QuoteSnapshot>,
+  sessionMaps: SessionQuoteMaps,
+  viewSession: QuoteViewSession,
+): Map<string, QuoteSnapshot> {
+  const quotes = new Map<string, QuoteSnapshot>();
+
+  for (const [symbol, base] of baseQuotes) {
+    quotes.set(symbol, {
+      ...base,
+      session: /\.US$/i.test(symbol) ? viewSession : base.session,
+    });
+  }
+
+  // Prefer official regular-session marks for US when available (important after hours).
+  if (viewSession === 'regular') {
+    for (const [symbol, regular] of sessionMaps.regular) {
+      const base = quotes.get(symbol);
+      const previousClose = base?.previousClose ?? regular.previousClose;
+      const price = regular.price;
+      quotes.set(symbol, {
+        ...base,
+        price,
+        previousClose,
+        change: previousClose ? price - previousClose : base?.change,
+        session: 'regular',
+        updatedAt: regular.updatedAt,
+      });
+    }
+    return quotes;
+  }
+
+  const sessionQuotes = sessionMaps[viewSession];
+  for (const [symbol, sessionQuote] of sessionQuotes) {
+    const base = quotes.get(symbol);
+    const regular = sessionMaps.regular.get(symbol);
+    const previousClose = resolveSessionPreviousClose(viewSession, sessionQuote, base, regular);
+    const price = sessionQuote.price;
+    quotes.set(symbol, {
+      ...base,
+      price,
+      previousClose,
+      change: previousClose ? price - previousClose : undefined,
+      session: viewSession,
+      updatedAt: sessionQuote.updatedAt,
+    });
+  }
+
+  // Tag remaining US names with the selected view even if only base tape is available.
+  for (const [symbol, quote] of quotes) {
+    if (/\.US$/i.test(symbol) && !quote.session) {
+      quotes.set(symbol, { ...quote, session: viewSession });
+    }
+  }
+
+  return quotes;
+}
+
 function resolveSessionPreviousClose(
   viewSession: QuoteViewSession,
   sessionQuote: ExtendedQuote,
-  regular?: QuoteSnapshot,
+  base?: QuoteSnapshot,
+  regular?: ExtendedQuote,
 ) {
-  if (viewSession === 'pre') {
-    return sessionQuote.previousClose ?? regular?.price ?? regular?.previousClose;
-  }
-  return regular?.previousClose ?? sessionQuote.previousClose;
+  // Prefer official prior close so total mark and today move share one baseline day.
+  if (sessionQuote.previousClose && sessionQuote.previousClose > 0) return sessionQuote.previousClose;
+  if (regular?.previousClose && regular.previousClose > 0) return regular.previousClose;
+  if (base?.previousClose && base.previousClose > 0) return base.previousClose;
+  // During pre, tape "price" on some feeds is still yesterday's regular close.
+  if (viewSession === 'pre' && base?.price && base.price > 0) return base.price;
+  return undefined;
 }
 
 async function fetchTencentQuotes(holdings: Holding[], signal?: AbortSignal): Promise<Map<string, QuoteSnapshot>> {
@@ -144,16 +197,15 @@ async function fetchTencentQuotes(holdings: Holding[], signal?: AbortSignal): Pr
   return parseTencentQuotes(text, holdings);
 }
 
-async function fetchSessionUsQuotes(
+async function fetchAllSessionUsQuotes(
   holdings: Holding[],
-  viewSession: QuoteViewSession,
   signal?: AbortSignal,
-): Promise<ExtendedQuotesResponse> {
+): Promise<{ quotesBySession: SessionQuoteMaps; marketSession: MarketSession }> {
   const usHoldings = holdings.filter(
     (holding) => holding.market === 'US' && /^[A-Z][A-Z0-9.-]{0,9}\.US$/i.test(holding.symbol),
   );
   if (!usHoldings.length) {
-    return { quotes: new Map(), marketSession: getUsMarketSession() };
+    return { quotesBySession: emptySessionMaps(), marketSession: getUsMarketSession() };
   }
 
   const symbols = Array.from(new Set(usHoldings.map((holding) => holding.symbol.toUpperCase())));
@@ -162,7 +214,7 @@ async function fetchSessionUsQuotes(
   ));
   const params = new URLSearchParams({
     symbols: symbols.join(','),
-    session: viewSession,
+    session: 'all',
   });
   if (etfs.length) params.set('etfs', etfs.join(','));
 
@@ -171,20 +223,39 @@ async function fetchSessionUsQuotes(
   const payload = (await response.json()) as {
     code?: number;
     data?: {
-      quotes?: ExtendedQuote[];
       marketSession?: MarketSession;
-      session?: MarketSession | QuoteSession | null;
+      session?: MarketSession | QuoteSession | 'all' | null;
+      quotesBySession?: {
+        pre?: ExtendedQuote[];
+        regular?: ExtendedQuote[];
+        post?: ExtendedQuote[];
+      };
+      quotes?: ExtendedQuote[];
     };
   };
+
   const marketSession = payload.data?.marketSession
     ?? (payload.data?.session === 'pre' || payload.data?.session === 'regular' || payload.data?.session === 'post' || payload.data?.session === 'closed'
       ? payload.data.session
       : getUsMarketSession());
 
-  return {
-    marketSession,
-    quotes: new Map((payload.data?.quotes ?? []).map((quote) => [quote.symbol, quote])),
+  const source = payload.data?.quotesBySession;
+  const quotesBySession: SessionQuoteMaps = {
+    pre: new Map((source?.pre ?? []).map((quote) => [quote.symbol, quote])),
+    regular: new Map((source?.regular ?? []).map((quote) => [quote.symbol, quote])),
+    post: new Map((source?.post ?? []).map((quote) => [quote.symbol, quote])),
   };
+
+  // Backward compatible: single-session payload still works.
+  if (!source && payload.data?.quotes?.length) {
+    for (const quote of payload.data.quotes) {
+      if (quote.session === 'pre' || quote.session === 'regular' || quote.session === 'post') {
+        quotesBySession[quote.session].set(quote.symbol, quote);
+      }
+    }
+  }
+
+  return { quotesBySession, marketSession };
 }
 
 function parseTencentQuotes(text: string, holdings: Holding[]): Map<string, QuoteSnapshot> {
@@ -329,6 +400,10 @@ function yahooSymbol(symbol: string) {
   return us?.[1] ?? symbol;
 }
 
+/**
+ * Reprice holdings from the selected session quotes.
+ * Always recalculates both today PnL and total unrealized PnL from the session mark.
+ */
 export function applyQuotes(holdings: Holding[], quotes: Map<string, QuoteSnapshot>): Holding[] {
   return holdings.map((holding) => {
     const quote = quotes.get(holding.symbol);
