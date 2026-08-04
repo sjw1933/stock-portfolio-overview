@@ -543,7 +543,7 @@ async function fetchText(url, signal) {
       'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
     },
   });
-  if (!response.ok) throw new Error(`Investing HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`news feed HTTP ${response.status}`);
   return response.text();
 }
 
@@ -565,16 +565,69 @@ function extractTag(block, tag) {
   return decodeXml(match?.[1] || '');
 }
 
-function parseRssItems(xml) {
+function parseRssItems(xml, defaults = {}) {
   return Array.from(String(xml || '').matchAll(/<item[\s\S]*?<\/item>/gi)).map((match) => {
     const block = match[0];
+    const title = extractTag(block, 'title');
+    const url = extractTag(block, 'link');
+    const source = extractTag(block, 'source')
+      || extractTag(block, 'author')
+      || extractTag(block, 'dc:creator')
+      || defaults.source
+      || 'RSS';
+    const description = extractTag(block, 'description');
     return {
-      title: extractTag(block, 'title'),
-      url: extractTag(block, 'link'),
-      source: extractTag(block, 'author') || 'Investing.com',
+      title,
+      url,
+      source: String(source).slice(0, 40),
+      description: description.slice(0, 400),
       publishedAt: normalizeNewsDate(extractTag(block, 'pubDate')),
+      feed: defaults.feed || 'rss',
     };
   }).filter((item) => item.title && item.url);
+}
+
+/** Map local symbols (AAPL.US / 00700.HK) to Yahoo Finance RSS tickers. */
+function yahooNewsTicker(symbol) {
+  const normalized = String(symbol || '').trim().toUpperCase();
+  if (!normalized) return '';
+  if (normalized.endsWith('.US')) return normalized.replace(/\.US$/, '');
+  if (normalized.endsWith('.HK')) {
+    const digits = normalized.replace(/\.HK$/, '').replace(/\D/g, '');
+    if (!digits) return '';
+    return `${digits.padStart(4, '0')}.HK`;
+  }
+  return normalized.replace(/\.(US|HK)$/, '');
+}
+
+function googleNewsQuery(holding) {
+  const base = String(holding.symbol || '').replace(/\.(US|HK)$/i, '');
+  const name = cleanHoldingName(holding.name);
+  const parts = [base];
+  if (name && name.toLowerCase() !== base.toLowerCase()) parts.push(`"${name}"`);
+  // Prefer recent company/ticker stories over broad market noise.
+  return `${parts.join(' OR ')} when:14d`;
+}
+
+function tickerNewsUrls(holding) {
+  const yahooTicker = yahooNewsTicker(holding.symbol);
+  const urls = [];
+  if (yahooTicker) {
+    urls.push({
+      feed: 'yahoo-ticker',
+      source: 'Yahoo Finance',
+      url: `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(yahooTicker)}&region=US&lang=en-US`,
+    });
+  }
+  const query = googleNewsQuery(holding);
+  if (query) {
+    urls.push({
+      feed: 'google-ticker',
+      source: 'Google News',
+      url: `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+    });
+  }
+  return urls;
 }
 
 function normalizeNewsDate(value) {
@@ -636,7 +689,7 @@ function haystackMatchesKeyword(haystack, keyword) {
 }
 
 function scoreNewsItem(item, holding) {
-  const haystack = `${item.title || ''} ${item.url || ''}`.toLowerCase();
+  const haystack = `${item.title || ''} ${item.description || ''} ${item.url || ''}`.toLowerCase();
   const matchedBy = [];
   let score = 0;
   let strongHits = 0;
@@ -665,6 +718,85 @@ function normalizeNewsHolding(item) {
   };
 }
 
+async function fetchTickerBoundNews(holdings, signal) {
+  // Cap fan-out: each holding may hit Yahoo + Google.
+  const targets = holdings.slice(0, 12);
+  const jobs = targets.flatMap((holding) => tickerNewsUrls(holding).map((feed) => ({ holding, ...feed })));
+  const bound = [];
+
+  for (let index = 0; index < jobs.length; index += 4) {
+    if (signal?.aborted) break;
+    const chunk = jobs.slice(index, index + 4);
+    const results = await Promise.allSettled(
+      chunk.map(async (job) => {
+        const xml = await fetchText(job.url, signal);
+        const items = parseRssItems(xml, { source: job.source, feed: job.feed }).slice(0, 8);
+        return items.map((item) => ({ ...item, boundHolding: job.holding, feed: job.feed }));
+      }),
+    );
+    for (const result of results) {
+      if (result.status === 'fulfilled') bound.push(...result.value);
+    }
+  }
+
+  return bound;
+}
+
+function attachTickerFeedItem(item) {
+  const holding = item.boundHolding;
+  if (!holding?.symbol) return null;
+
+  const scored = scoreNewsItem(item, holding);
+  const base = yahooNewsTicker(holding.symbol) || holding.symbol.replace(/\.(US|HK)$/i, '');
+  const haystack = `${item.title || ''} ${item.description || ''} ${item.url || ''}`.toLowerCase();
+  const tickerHit = haystackMatchesKeyword(haystack, base)
+    || haystackMatchesKeyword(haystack, holding.symbol)
+    || (cleanHoldingName(holding.name).length >= 2 && haystack.includes(cleanHoldingName(holding.name).toLowerCase()));
+
+  // Yahoo/Google ticker feeds still mix in market roundups — keep only items that look related.
+  const minScore = item.feed === 'yahoo-ticker' ? 5 : newsMinMatchScore;
+  if (!tickerHit && scored.score < minScore) return null;
+
+  const matchedBy = Array.from(new Set([
+    ...scored.matchedBy,
+    base,
+    item.feed === 'yahoo-ticker' ? 'yahoo-ticker' : 'google-ticker',
+  ].filter(Boolean))).slice(0, 6);
+
+  return {
+    title: item.title,
+    url: item.url,
+    source: item.source,
+    publishedAt: item.publishedAt,
+    description: item.description,
+    symbol: holding.symbol,
+    matchedBy,
+    score: Math.max(scored.score, tickerHit ? 12 : 0) + (item.feed === 'yahoo-ticker' ? 4 : 2),
+    feed: item.feed,
+  };
+}
+
+function matchGeneralFeedItem(item, holdings) {
+  let best = null;
+  for (const holding of holdings) {
+    const scored = scoreNewsItem(item, holding);
+    if (scored.score < newsMinMatchScore) continue;
+    if (!best || scored.score > best.score) best = { holding, ...scored };
+  }
+  if (!best) return null;
+  return {
+    title: item.title,
+    url: item.url,
+    source: item.source,
+    publishedAt: item.publishedAt,
+    description: item.description,
+    symbol: best.holding.symbol,
+    matchedBy: best.matchedBy,
+    score: best.score,
+    feed: item.feed || 'investing',
+  };
+}
+
 async function fetchHoldingNews(payload) {
   const holdings = Array.isArray(payload?.holdings) ? payload.holdings.slice(0, 20).map(normalizeNewsHolding).filter((item) => item.symbol) : [];
   if (!holdings.length) throw new Error('holdings is empty');
@@ -673,42 +805,51 @@ async function fetchHoldingNews(payload) {
   const uniqueHoldings = Array.from(new Map(holdings.map((item) => [item.symbol, item])).values());
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 18000);
+  const timeout = setTimeout(() => controller.abort(), 22000);
   try {
-    const feedResults = await Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal)));
-    const items = feedResults.flatMap((result) => result.status === 'fulfilled' ? parseRssItems(result.value) : []);
-    const unique = new Map();
-    for (const item of items) if (!unique.has(item.url)) unique.set(item.url, item);
+    const [tickerBound, generalResults] = await Promise.all([
+      fetchTickerBoundNews(uniqueHoldings, controller.signal).catch(() => []),
+      Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal))),
+    ]);
+
+    const generalItems = generalResults.flatMap((result) => (
+      result.status === 'fulfilled'
+        ? parseRssItems(result.value, { source: 'Investing.com', feed: 'investing' })
+        : []
+    ));
 
     const matched = [];
-    for (const item of unique.values()) {
-      let best = null;
-      for (const holding of uniqueHoldings) {
-        const scored = scoreNewsItem(item, holding);
-        if (scored.score < newsMinMatchScore) continue;
-        if (!best || scored.score > best.score) best = { holding, ...scored };
-      }
-      if (best) {
-        matched.push({
-          ...item,
-          symbol: best.holding.symbol,
-          matchedBy: best.matchedBy,
-          score: best.score,
-        });
-      }
+    const seenUrls = new Set();
+
+    // 1) Ticker-bound Yahoo / Google feeds (primary association).
+    for (const item of tickerBound) {
+      const attached = attachTickerFeedItem(item);
+      if (!attached || seenUrls.has(attached.url)) continue;
+      seenUrls.add(attached.url);
+      matched.push(attached);
+    }
+
+    // 2) General Investing RSS with strict keyword match (secondary).
+    for (const item of generalItems) {
+      if (seenUrls.has(item.url)) continue;
+      const attached = matchGeneralFeedItem(item, uniqueHoldings);
+      if (!attached) continue;
+      seenUrls.add(attached.url);
+      matched.push(attached);
     }
 
     // Fallback is explicitly market-level — never pin random stories onto holdings[0].
-    const fallbackItems = Array.from(unique.values()).slice(0, 8).map((item) => ({
+    const fallbackItems = generalItems.slice(0, 8).map((item) => ({
       ...item,
       symbol: 'MARKET',
       matchedBy: ['market'],
       score: 0,
+      feed: 'investing',
     }));
 
     const selected = (matched.length ? matched : fallbackItems)
       .sort((a, b) => b.score - a.score || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-      .slice(0, 12)
+      .slice(0, 18)
       .map((item, index) => ({
         id: `${item.symbol}-${index}-${hashText(item.url)}`,
         symbol: item.symbol,
@@ -716,16 +857,25 @@ async function fetchHoldingNews(payload) {
         source: item.source.slice(0, 40),
         url: item.url,
         publishedAt: item.publishedAt,
-        matchedBy: item.matchedBy.slice(0, 6),
+        matchedBy: (item.matchedBy || []).slice(0, 6),
         analysis: analyzeNewsItem(item),
       }));
 
-    const matchedSymbols = new Set(matched.map((item) => item.symbol));
+    const matchedSymbols = new Set(matched.map((item) => item.symbol).filter((symbol) => symbol !== 'MARKET'));
+    const tickerHits = matched.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
+    const source = !matched.length
+      ? 'fallback'
+      : tickerHits > 0 && matched.some((item) => item.feed === 'investing')
+        ? 'mixed'
+        : tickerHits > 0
+          ? 'ticker'
+          : 'investing';
+
     return {
-      source: matched.length ? 'investing' : 'fallback',
+      source,
       fetchedAt: new Date().toISOString(),
       summary: matched.length
-        ? `按持仓代码/名称加权匹配：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，共 ${selected.length} 条相关新闻。`
+        ? `按 ticker 源（Yahoo/Google）+ 持仓关键词：${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，共 ${selected.length} 条相关新闻${tickerHits ? `（其中 ${tickerHits} 条来自 ticker 源）` : ''}。`
         : '未命中具体持仓代码或公司名，当前展示市场参考新闻（未挂到任一持仓）。',
       items: selected,
     };

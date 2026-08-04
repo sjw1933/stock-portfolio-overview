@@ -6,7 +6,7 @@ import type { AggregatedHolding, HoldingNewsItem, HoldingNewsStatus } from '../t
 const statusLabel: Record<HoldingNewsStatus, string> = {
   idle: '待加载',
   loading: '抓取中',
-  live: 'Investing CN',
+  live: 'Ticker 新闻',
   fallback: '市场新闻',
   error: '抓取失败',
 };

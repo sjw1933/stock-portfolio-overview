@@ -205,7 +205,7 @@ export type HoldingNewsItem = {
 export type HoldingNewsStatus = 'idle' | 'loading' | 'live' | 'fallback' | 'error';
 
 export type HoldingNewsResult = {
-  source: 'investing' | 'fallback';
+  source: 'ticker' | 'investing' | 'mixed' | 'fallback';
   fetchedAt: string;
   summary: string;
   items: HoldingNewsItem[];

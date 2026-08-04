@@ -21,7 +21,7 @@ import { applyBuy, reverseBuy } from './utils/buyTransactions';
 
 const dailyRiskAnalysisLimit = 3;
 const riskAnalysisCacheKey = 'gup-risk-analysis-cache-v2';
-const holdingNewsCacheKey = 'gup-holding-news-cache-v4';
+const holdingNewsCacheKey = 'gup-holding-news-cache-v5';
 const holdingNewsAiEnabledKey = 'gup-holding-news-ai-enabled-v1';
 const tabs: Tab[] = ['overview', 'holdings', 'trends', 'ask', 'import'];
 
@@ -128,7 +128,7 @@ export function App() {
       const result = await fetchHoldingNews(holdings, controller.signal);
       writeHoldingNewsCache({ day: todayKey(), result });
       setHoldingNews(result);
-      setNewsStatus(result.source === 'investing' ? 'live' : 'fallback');
+      setNewsStatus(result.source === 'fallback' ? 'fallback' : 'live');
     } catch (error) {
       console.warn('holding news failed', error);
       setNewsStatus('error');
@@ -327,7 +327,7 @@ export function App() {
     const cache = readHoldingNewsCache();
     if (cache.result) {
       setHoldingNews(cache.result);
-      setNewsStatus(cache.result.source === 'investing' ? 'live' : 'fallback');
+      setNewsStatus(cache.result.source === 'fallback' ? 'fallback' : 'live');
     }
 
     const controller = new AbortController();
@@ -337,7 +337,7 @@ export function App() {
         .then((result) => {
           writeHoldingNewsCache({ day: todayKey(), result });
           setHoldingNews(result);
-          setNewsStatus(result.source === 'investing' ? 'live' : 'fallback');
+          setNewsStatus(result.source === 'fallback' ? 'fallback' : 'live');
         })
         .catch((error) => {
           console.warn('holding news failed', error);
@@ -403,7 +403,7 @@ export function App() {
 
   const riskSummary = riskAnalysis?.summary ?? (riskAnalysisStatus === 'loading' ? '正在调用大模型生成持仓风险解读。' : '当前展示本地硬规则预警。');
   const newsItems = holdingNews?.items ?? [];
-  const newsSummary = holdingNews?.summary ?? (newsStatus === 'loading' ? '正在从 Investing 抓取持仓相关新闻。' : '按当前持仓代码从 Investing 新闻源聚合相关新闻。');
+  const newsSummary = holdingNews?.summary ?? (newsStatus === 'loading' ? '正在按持仓 ticker 抓取 Yahoo/Google 与 Investing 相关新闻。' : '按持仓 ticker 聚合 Yahoo/Google 新闻，并用关键词补匹配 Investing 资讯。');
   const newsFetchedAt = holdingNews?.fetchedAt ?? '';
 
   const context = {
