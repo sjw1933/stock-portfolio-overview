@@ -1177,117 +1177,40 @@ button {
 
 .structure-body {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.structure-body-chart-only {
+  justify-items: center;
 }
 
 .fold-sidebar .structure-body {
   grid-template-columns: 1fr;
 }
 
-.fold-sidebar .pie-wrap {
-  height: 130px;
-}
-
 .pie-wrap {
   height: 170px;
   min-width: 0;
+  width: 100%;
 }
 
-.structure-list {
+.pie-wrap-large {
+  height: 220px;
+  max-width: 280px;
+}
+
+.fold-sidebar .pie-wrap,
+.fold-sidebar .pie-wrap-large {
+  height: 190px;
+  max-width: 100%;
+}
+
+.structure-empty {
+  height: 100%;
   display: grid;
-  gap: 12px;
-  max-height: 220px;
-  overflow: auto;
-}
-
-.structure-market-block {
-  padding-bottom: 10px;
-  border-bottom: 1px solid #edf1f6;
-}
-
-.structure-market-block:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.structure-market-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.structure-market-head span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.structure-market-head b {
-  min-width: 0;
-  text-align: right;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.structure-market-head i {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-}
-
-.structure-pct {
-  color: #94a3b8;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.structure-holding-pct {
-  display: grid;
-  gap: 4px;
-  margin: 8px 0 0;
-  padding: 0 0 0 16px;
-  list-style: none;
-}
-
-.structure-holding-pct li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.structure-holding-pct span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.structure-holding-pct em {
-  flex: 0 0 auto;
-  color: #0f172a;
-  font-style: normal;
-  font-weight: 800;
-}
-
-.structure-holding-empty {
-  margin: 6px 0 0 16px;
+  place-items: center;
   color: #94a3b8;
   font-size: 12px;
   font-weight: 700;

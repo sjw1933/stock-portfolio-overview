@@ -2,139 +2,160 @@ import { useMemo } from 'react';
 import { PieChart } from 'lucide-react';
 import { Cell, Pie, PieChart as RePieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { AppContext } from '../appContext';
-import type { AggregatedHolding } from '../types';
 import { PanelTitle } from './PanelTitle';
 import { convert, money } from '../utils/currency';
+
+const palette = [
+  '#1769e8',
+  '#2687ff',
+  '#0f5cd6',
+  '#4f8ef7',
+  '#7aaefc',
+  '#3b82f6',
+  '#2563eb',
+  '#1d4ed8',
+  '#60a5fa',
+  '#93c5fd',
+  '#38bdf8',
+  '#0ea5e9',
+];
 
 function shortSymbol(symbol: string) {
   return symbol.replace(/\.US$|\.HK$/i, '');
 }
 
-type MarketSlice = {
-  market: 'US' | 'HK';
+type PieSlice = {
+  key: string;
   name: string;
+  fullName: string;
   value: number;
+  percent: number;
   color: string;
-  holdings: Array<{
-    symbol: string;
-    name: string;
-    value: number;
-    percent: number;
-  }>;
 };
+
+function PieSliceLabel(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  percent?: number;
+  name?: string;
+}) {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
+  if (
+    cx == null
+    || cy == null
+    || midAngle == null
+    || innerRadius == null
+    || outerRadius == null
+    || percent == null
+    || !name
+  ) {
+    return null;
+  }
+
+  // Skip tiny slices to avoid overlapping labels.
+  if (percent < 0.04) return null;
+
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const pct = (percent * 100).toFixed(0);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={10}
+      fontWeight={800}
+      style={{ pointerEvents: 'none', textShadow: '0 1px 2px rgb(15 23 42 / 35%)' }}
+    >
+      {name}
+      <tspan x={x} dy="1.15em" fontSize={9} fontWeight={700}>
+        {pct}%
+      </tspan>
+    </text>
+  );
+}
 
 export function StructurePanel({ context }: { context: AppContext }) {
   const currency = context.currency;
 
   const { pieData, gross } = useMemo(() => {
-    const grossValue = context.aggregated.reduce(
-      (sum, item) => sum + convert(item.marketValue, item.currency, currency),
-      0,
-    );
+    const rows: PieSlice[] = context.aggregated
+      .map((item, index) => {
+        const value = convert(item.marketValue, item.currency, currency);
+        return {
+          key: item.symbol,
+          name: shortSymbol(item.symbol),
+          fullName: item.name,
+          value,
+          percent: 0,
+          color: palette[index % palette.length],
+        };
+      })
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value);
 
-    const buildMarket = (market: 'US' | 'HK', name: string, color: string): MarketSlice => {
-      const holdings = context.aggregated
-        .filter((item) => item.market === market)
-        .map((item) => {
-          const value = convert(item.marketValue, item.currency, currency);
-          return {
-            symbol: shortSymbol(item.symbol),
-            name: item.name,
-            value,
-            percent: grossValue > 0.000001 ? (value / grossValue) * 100 : 0,
-          };
-        })
-        .filter((item) => item.value > 0)
-        .sort((a, b) => b.value - a.value);
+    const total = rows.reduce((sum, item) => sum + item.value, 0);
+    const withPct = rows.map((item) => ({
+      ...item,
+      percent: total > 0.000001 ? item.value / total : 0,
+    }));
 
-      const value = holdings.reduce((sum, item) => sum + item.value, 0);
-      return { market, name, value, color, holdings };
-    };
-
-    // Prefer live holding market values so the pie matches 合并持仓.
-    // Fall back to account net assets only when that market has snapshots but no rows.
-    const usFromHoldings = buildMarket('US', '美股', '#1769e8');
-    const hkFromHoldings = buildMarket('HK', '港股', '#e4485f');
-
-    const usSnapshot = context.accountSnapshots
-      .filter((snapshot) => snapshot.market === 'US')
-      .reduce((sum, snapshot) => sum + convert(snapshot.netAsset, snapshot.currency, currency), 0);
-    const hkSnapshot = context.accountSnapshots
-      .filter((snapshot) => snapshot.market === 'HK')
-      .reduce((sum, snapshot) => sum + convert(snapshot.netAsset, snapshot.currency, currency), 0);
-
-    const us = usFromHoldings.holdings.length
-      ? usFromHoldings
-      : { ...usFromHoldings, value: usSnapshot };
-    const hk = hkFromHoldings.holdings.length
-      ? hkFromHoldings
-      : { ...hkFromHoldings, value: hkSnapshot };
-
-    const pieData = [us, hk];
-    const gross = pieData.reduce((sum, item) => sum + item.value, 0);
-    return { pieData, gross };
-  }, [context.aggregated, context.accountSnapshots, currency]);
+    return { pieData: withPct, gross: total };
+  }, [context.aggregated, currency]);
 
   return (
     <section className="panel structure-panel">
       <PanelTitle
         icon={PieChart}
         title="仓位结构"
-        action={gross > 0 ? `合计 ${money(gross, currency, context.masked)}` : '暂无持仓'}
+        action={gross > 0 ? `持仓合计 ${money(gross, currency, context.masked)}` : '暂无持仓'}
       />
-      <div className="structure-body">
-        <div className="pie-wrap">
-          <ResponsiveContainer width="100%" height="100%">
-            <RePieChart>
-              <Pie
-                data={pieData}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={45}
-                outerRadius={72}
-                paddingAngle={pieData.some((item) => item.value > 0) ? 3 : 0}
-              >
-                {pieData.map((entry) => (
-                  <Cell key={entry.market} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(value, name) => [
-                  money(Number(value ?? 0), currency, context.masked),
-                  String(name ?? ''),
-                ]}
-              />
-            </RePieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="structure-list">
-          {pieData.map((market) => {
-            const marketPct = gross > 0.000001 ? (market.value / gross) * 100 : 0;
-            return (
-              <div key={market.market} className="structure-market-block">
-                <div className="structure-market-head">
-                  <span>
-                    <i style={{ background: market.color }} />
-                    {market.name}
-                    <em className="structure-pct">{marketPct.toFixed(1)}%</em>
-                  </span>
-                  <b>{money(market.value, currency, context.masked)}</b>
-                </div>
-                {market.holdings.length > 0 ? (
-                  <ul className="structure-holding-pct">
-                    {market.holdings.map((item) => (
-                      <li key={item.symbol}>
-                        <span title={item.name}>{item.symbol}</span>
-                        <em>{item.percent.toFixed(1)}%</em>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="structure-holding-empty">暂无持仓 · 0%</p>
-                )}
-              </div>
-            );
-          })}
+      <div className="structure-body structure-body-chart-only">
+        <div className="pie-wrap pie-wrap-large">
+          {pieData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <RePieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={42}
+                  outerRadius={78}
+                  paddingAngle={pieData.length > 1 ? 2 : 0}
+                  stroke="#fff"
+                  strokeWidth={1}
+                  labelLine={false}
+                  label={<PieSliceLabel />}
+                >
+                  {pieData.map((entry) => (
+                    <Cell key={entry.key} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value, _name, item) => {
+                    const payload = item?.payload as PieSlice | undefined;
+                    const pct = payload ? ` · ${(payload.percent * 100).toFixed(1)}%` : '';
+                    return [
+                      `${money(Number(value ?? 0), currency, context.masked)}${pct}`,
+                      payload?.fullName || payload?.name || '',
+                    ];
+                  }}
+                />
+              </RePieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="structure-empty">暂无持仓市值</div>
+          )}
         </div>
       </div>
     </section>
