@@ -1,5 +1,5 @@
 import { Activity, BrainCircuit, Minus, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppContext } from '../appContext';
 import { PanelTitle } from './PanelTitle';
 import { aiConfigPayload } from '../utils/aiConfig';
@@ -24,19 +24,43 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
     [context.aggregated, context.currency, context.summary.total, context.quoteViewSession, context.marketSession],
   );
 
-  const [outlook, setOutlook] = useState<PortfolioOutlook>(ruleOutlook);
+  // Only invalidate AI when ticker set / session view changes — not on every 10s quote tick.
+  const structuralKey = useMemo(
+    () => JSON.stringify({
+      symbols: context.aggregated.map((item) => item.symbol).sort(),
+      quoteViewSession: context.quoteViewSession,
+      marketSession: context.marketSession,
+      currency: context.currency,
+    }),
+    [context.aggregated, context.quoteViewSession, context.marketSession, context.currency],
+  );
+
+  const [aiOutlook, setAiOutlook] = useState<PortfolioOutlook | null>(null);
+  const [aiStructuralKey, setAiStructuralKey] = useState('');
   const [status, setStatus] = useState<'rule' | 'loading' | 'ai' | 'fallback'>('rule');
   const [error, setError] = useState('');
+  const requestIdRef = useRef(0);
 
-  // Keep rule baseline in sync when holdings/session change; clear stale AI until user refreshes.
   useEffect(() => {
-    setOutlook(ruleOutlook);
-    setStatus('rule');
-    setError('');
-  }, [ruleOutlook]);
+    if (aiStructuralKey && aiStructuralKey !== structuralKey) {
+      setAiOutlook(null);
+      setAiStructuralKey('');
+      setStatus('rule');
+      setError('');
+    }
+  }, [structuralKey, aiStructuralKey]);
+
+  const outlook = useMemo(() => {
+    if (aiOutlook && aiStructuralKey === structuralKey) {
+      return blendLiveMetrics(aiOutlook, ruleOutlook);
+    }
+    return ruleOutlook;
+  }, [aiOutlook, aiStructuralKey, structuralKey, ruleOutlook]);
 
   async function runAiOutlook() {
-    if (!ruleOutlook.items.length) return;
+    if (!ruleOutlook.items.length || status === 'loading') return;
+    const requestId = ++requestIdRef.current;
+    const keyAtStart = structuralKey;
     setStatus('loading');
     setError('');
     try {
@@ -47,14 +71,25 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
         currency: context.currency,
         ...aiConfigPayload(context.aiConfig),
       });
-      setOutlook(result);
-      setStatus(result.source === 'ai' ? 'ai' : 'fallback');
-      if (result.source === 'fallback') {
-        setError('AI 暂不可用，已回退规则预判');
+      if (requestId !== requestIdRef.current) return;
+      if (keyAtStart !== structuralKey) return;
+
+      if (result.source === 'ai') {
+        setAiOutlook(result);
+        setAiStructuralKey(keyAtStart);
+        setStatus('ai');
+        setError('');
+      } else {
+        setAiOutlook(null);
+        setAiStructuralKey('');
+        setStatus('fallback');
+        setError(stripFallbackMessage(result.summary) || 'AI 暂不可用，已回退规则预判');
       }
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.warn('ai holding outlook failed', err);
-      setOutlook(ruleOutlook);
+      setAiOutlook(null);
+      setAiStructuralKey('');
       setStatus('fallback');
       setError(err instanceof Error ? err.message : 'AI 预判失败');
     }
@@ -70,7 +105,7 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
         : `${outlook.sessionLabel} · 规则预判`;
 
   return (
-    <section className={`panel outlook-panel ${compact ? 'compact' : ''}`}>
+    <section className={`panel outlook-panel ${compact ? 'compact' : ''} source-${status}`}>
       <PanelTitle icon={Activity} title="今日持仓走势预判" action={sourceAction} />
 
       <div className="outlook-actions">
@@ -83,6 +118,9 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
           {status === 'loading' ? <RefreshCw size={15} className="spin" /> : <BrainCircuit size={15} />}
           {status === 'loading' ? 'AI 分析中…' : status === 'ai' ? '重新 AI 预判' : '接入 AI 预判'}
         </button>
+        <span className={`outlook-source-pill source-${status}`}>
+          {status === 'ai' ? `已接入 ${outlook.model || 'AI'}` : status === 'loading' ? '请求中' : status === 'fallback' ? 'AI 未成功' : '当前：规则预判'}
+        </span>
         <span className="outlook-ai-hint">
           {context.aiConfig.apiKey ? '使用页面 AI 配置' : '使用服务器默认模型'}
         </span>
@@ -143,11 +181,40 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
       )}
 
       <p className="outlook-note">
-        默认规则预判；点「接入 AI 预判」后走服务器已配置的 OpenAI 兼容 / Anthropic 模型做复盘增强。
-        不构成投资建议，请结合实时盘口自行判断。
+        默认规则预判；点「接入 AI 预判」后调用服务器 OpenAI 兼容 / Anthropic 模型。
+        行情刷新不会清掉 AI 结果。不构成投资建议。
       </p>
     </section>
   );
+}
+
+/** Keep AI bias/reasons, refresh live weight/todayRate from latest rules. */
+function blendLiveMetrics(ai: PortfolioOutlook, rule: PortfolioOutlook): PortfolioOutlook {
+  const liveBySymbol = new Map(rule.items.map((item) => [item.symbol, item]));
+  const items = ai.items.map((item) => {
+    const live = liveBySymbol.get(item.symbol);
+    if (!live) return item;
+    return {
+      ...item,
+      name: live.name,
+      type: live.type,
+      todayRate: live.todayRate,
+      weight: live.weight,
+    };
+  });
+  return {
+    ...ai,
+    sessionLabel: rule.sessionLabel,
+    items,
+    bullishCount: items.filter((item) => item.bias === 'bullish').length,
+    bearishCount: items.filter((item) => item.bias === 'bearish').length,
+    neutralCount: items.filter((item) => item.bias === 'neutral').length,
+  };
+}
+
+function stripFallbackMessage(summary: string) {
+  const match = summary.match(/AI 暂不可用[:：]\s*(.+)$/);
+  return match?.[1]?.trim() || '';
 }
 
 function BiasIcon({ bias }: { bias: OutlookBias }) {
