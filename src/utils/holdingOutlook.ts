@@ -30,6 +30,8 @@ export type PortfolioOutlook = {
   /** rule = local heuristics; ai = LLM enhanced; fallback = AI failed then rules */
   source?: 'rule' | 'ai' | 'fallback';
   model?: string;
+  /** Friendly AI failure message when source is fallback */
+  error?: string;
 };
 
 type BuildOutlookInput = {

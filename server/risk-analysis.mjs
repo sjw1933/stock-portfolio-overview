@@ -1625,8 +1625,8 @@ async function callOpenAICompatibleOutlook(payload, aiConfig) {
       },
       body: JSON.stringify({
         model: config.model,
-        temperature: 0.25,
-        max_tokens: 1200,
+        temperature: 0.2,
+        max_tokens: 700,
         messages: [
           { role: 'system', content: '你是谨慎的个人持仓短线复盘助手。只基于用户数据输出 JSON 预判，不给确定性投资建议。' },
           { role: 'user', content: buildOutlookPrompt(payload) },
@@ -1635,7 +1635,7 @@ async function callOpenAICompatibleOutlook(payload, aiConfig) {
     });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 200)}`);
+      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 280)}`);
     }
     const body = await response.json();
     const text = body?.choices?.[0]?.message?.content || '';
@@ -1662,14 +1662,14 @@ async function callAnthropicOutlook(payload, aiConfig) {
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: 1200,
-        temperature: 0.25,
+        max_tokens: 700,
+        temperature: 0.2,
         messages: [{ role: 'user', content: buildOutlookPrompt(payload) }],
       }),
     });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 200)}`);
+      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 280)}`);
     }
     const body = await response.json();
     const text = body?.content?.map((part) => part?.text || '').join('\n') || '';
@@ -1682,6 +1682,28 @@ async function callAnthropicOutlook(payload, aiConfig) {
 async function callOutlookLlm(payload, aiConfig) {
   if (activeProvider(aiConfig) === 'anthropic') return callAnthropicOutlook(payload, aiConfig);
   return callOpenAICompatibleOutlook(payload, aiConfig);
+}
+
+/** Map upstream gateway failures into short Chinese copy for the dashboard. */
+function friendlyLlmError(error) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/insufficient_user_quota|额度不足/i.test(message)) {
+    return 'AI 额度不足，请到网关充值，或在页面右上角填写自己的 API Key';
+  }
+  if (/circuit breaker|skip candidate|raw request middlewares/i.test(message)) {
+    return 'AI 网关线路熔断或节点跳过，请稍后再试，或更换模型';
+  }
+  if (/aborted|AbortError|timeout/i.test(message)) {
+    return 'AI 请求超时，请稍后重试';
+  }
+  if (/401|unauthorized|invalid.*key|incorrect api key/i.test(message)) {
+    return 'AI Key 无效或未授权，请检查服务器或页面 API 配置';
+  }
+  if (/429|rate limit/i.test(message)) {
+    return 'AI 请求过于频繁，请稍后再试';
+  }
+  const compact = message.replace(/\s+/g, ' ').trim();
+  return compact.slice(0, 140) || 'AI 服务暂时不可用';
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1767,15 +1789,17 @@ const server = http.createServer(async (req, res) => {
         const result = await callOutlookLlm(payload, aiConfig);
         return sendJson(res, 200, { code: 0, data: result });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'holding outlook failed';
-        console.warn(message);
+        const raw = error instanceof Error ? error.message : 'holding outlook failed';
+        const message = friendlyLlmError(error);
+        console.warn(raw);
         return sendJson(res, 200, {
           code: 0,
           data: {
             ...ruleOutlook,
             source: 'fallback',
             model: '',
-            summary: `${String(ruleOutlook.summary || '规则预判可用。')}（AI 暂不可用：${message.slice(0, 80)}）`,
+            summary: String(ruleOutlook.summary || '规则预判可用。'),
+            error: message,
           },
         });
       }

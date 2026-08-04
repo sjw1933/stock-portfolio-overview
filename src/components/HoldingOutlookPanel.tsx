@@ -83,7 +83,7 @@ export function HoldingOutlookPanel({ context, compact = false }: { context: App
         setAiOutlook(null);
         setAiStructuralKey('');
         setStatus('fallback');
-        setError(stripFallbackMessage(result.summary) || 'AI 暂不可用，已回退规则预判');
+        setError(result.error || stripFallbackMessage(result.summary) || 'AI 暂不可用，已回退规则预判');
       }
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
