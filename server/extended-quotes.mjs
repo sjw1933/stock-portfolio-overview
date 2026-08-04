@@ -1,5 +1,5 @@
 const nasdaqBaseUrl = 'https://api.nasdaq.com/api/quote';
-const cacheTtlMs = 8_000;
+const successCacheTtlMs = 15_000;
 const quoteCache = new Map();
 
 const marketClockFormatter = new Intl.DateTimeFormat('en-US', {
@@ -57,14 +57,16 @@ export async function fetchExtendedQuotes(entries, options = {}) {
   const uniqueEntries = Array.from(new Map(entries.map((entry) => [entry.symbol, entry])).values()).slice(0, 30);
   const quotes = [];
 
-  for (let index = 0; index < uniqueEntries.length; index += 4) {
-    const chunk = uniqueEntries.slice(index, index + 4);
+  // Sequential chunks reduce Yahoo 429 pressure.
+  for (let index = 0; index < uniqueEntries.length; index += 2) {
+    const chunk = uniqueEntries.slice(index, index + 2);
     const results = await Promise.allSettled(
       chunk.map((entry) => fetchSessionQuote(entry, session, marketDate, now)),
     );
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value) quotes.push(result.value);
     }
+    if (index + 2 < uniqueEntries.length) await sleep(120);
   }
 
   return { session, marketSession, requestedSession: session, fetchedAt, quotes };
@@ -75,17 +77,18 @@ async function fetchAllSessionQuotes(entries, now, marketSession, fetchedAt) {
   const uniqueEntries = Array.from(new Map(entries.map((entry) => [entry.symbol, entry])).values()).slice(0, 30);
   const quotesBySession = { pre: [], regular: [], post: [] };
 
-  for (let index = 0; index < uniqueEntries.length; index += 4) {
-    const chunk = uniqueEntries.slice(index, index + 4);
-    const results = await Promise.allSettled(
-      chunk.map((entry) => fetchAllSessionsForEntry(entry, marketDate, now)),
-    );
-    for (const result of results) {
-      if (result.status !== 'fulfilled' || !result.value) continue;
+  for (let index = 0; index < uniqueEntries.length; index += 1) {
+    const entry = uniqueEntries[index];
+    try {
+      const value = await fetchAllSessionsForEntry(entry, marketDate, now);
+      if (!value) continue;
       for (const session of ['pre', 'regular', 'post']) {
-        if (result.value[session]) quotesBySession[session].push(result.value[session]);
+        if (value[session]) quotesBySession[session].push(value[session]);
       }
+    } catch {
+      // Keep going for remaining symbols.
     }
+    if (index + 1 < uniqueEntries.length) await sleep(100);
   }
 
   const liveSession = marketSession === 'pre' || marketSession === 'post' || marketSession === 'regular'
@@ -110,35 +113,42 @@ async function fetchAllSessionsForEntry(entry, marketDate, now) {
   /** @type {Record<string, any>} */
   const bySession = {};
 
-  // Live extended hours: prefer Nasdaq for the active pre/post tape.
-  const live = getUsMarketSession(now);
-  if (live === 'pre' || live === 'post') {
+  // Nasdaq pre/post remain available after the close (previous session tape).
+  for (const session of ['pre', 'post']) {
     try {
-      const nasdaqQuote = await fetchNasdaqExtendedQuote(entry, live, marketDate);
-      if (nasdaqQuote) bySession[live] = nasdaqQuote;
+      const nasdaqQuote = await fetchNasdaqExtendedQuote(entry, session, marketDate);
+      if (nasdaqQuote) bySession[session] = nasdaqQuote;
     } catch {
-      // Yahoo chart below still covers pre/regular/post.
+      // Yahoo chart fills gaps below.
     }
   }
 
-  try {
-    const ticker = entry.symbol.replace(/\.US$/i, '');
-    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d&includePrePost=true`;
-    const payload = await fetchJson(url, {
-      accept: 'application/json, text/plain, */*',
-      'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-    });
-    for (const session of ['pre', 'regular', 'post']) {
-      if (bySession[session]) continue;
-      const quote = parseYahooExtendedPayload(payload, entry.symbol, session, now);
-      if (quote) bySession[session] = quote;
+  // Need Yahoo for official regular-session marks (and any missing pre/post).
+  // Prefer a single chart call; skip if all three sessions already filled.
+  if (!bySession.pre || !bySession.regular || !bySession.post) {
+    try {
+      await sleep(150);
+      const ticker = entry.symbol.replace(/\.US$/i, '');
+      const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d&includePrePost=true`;
+      const payload = await fetchJson(url, {
+        accept: 'application/json, text/plain, */*',
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+      });
+      for (const session of ['pre', 'regular', 'post']) {
+        if (bySession[session]) continue;
+        const quote = parseYahooExtendedPayload(payload, entry.symbol, session, now);
+        if (quote) bySession[session] = quote;
+      }
+    } catch {
+      // Leave partial map from Nasdaq; client falls back to regular tape for missing sessions.
     }
-  } catch {
-    // Leave partial session map if Yahoo fails.
   }
 
   const value = Object.keys(bySession).length ? bySession : null;
-  quoteCache.set(cacheKey, { quote: value, expiresAt: Date.now() + cacheTtlMs });
+  // Only cache successful maps so transient 429s do not pin empty results.
+  if (value) {
+    quoteCache.set(cacheKey, { quote: value, expiresAt: Date.now() + successCacheTtlMs });
+  }
   return value;
 }
 
@@ -161,8 +171,16 @@ async function fetchSessionQuote(entry, session, marketDate, now) {
       // Yahoo minute data below is the fallback when Nasdaq is unavailable.
     }
   }
-  if (!quote) quote = await fetchYahooSessionQuote(entry, session, now);
-  quoteCache.set(cacheKey, { quote, expiresAt: Date.now() + cacheTtlMs });
+  if (!quote) {
+    try {
+      quote = await fetchYahooSessionQuote(entry, session, now);
+    } catch {
+      quote = null;
+    }
+  }
+  if (quote) {
+    quoteCache.set(cacheKey, { quote, expiresAt: Date.now() + successCacheTtlMs });
+  }
   return quote;
 }
 
@@ -207,7 +225,9 @@ async function fetchJson(url, headers) {
 export function parseNasdaqExtendedPayload(payload, symbol, session, marketDate) {
   const data = payload?.data;
   const updateLines = Array.isArray(data?.lastUpdateInfo) ? data.lastUpdateInfo.map(String) : [];
-  const updatedAt = updateLines.find((line) => line.includes(marketDate));
+  // Accept today's stamp, or the latest "Data last updated ..." line after midnight ET.
+  const updatedAt = updateLines.find((line) => line.includes(marketDate))
+    || updateLines.find((line) => /data last updated/i.test(line));
   if (!updatedAt) return null;
 
   const row = data?.infoTable?.rows?.[0];
@@ -255,7 +275,6 @@ export function parseYahooExtendedPayload(payload, symbol, session, now = new Da
   const fromBars = pickLastBarInPeriod(timestamps, closes, period, now);
   if (!fromBars) return null;
 
-  // Day baseline is prior close so today PnL and total session mark are consistent.
   return {
     symbol,
     price: fromBars.price,
@@ -295,4 +314,8 @@ function parsePrice(value) {
   const match = String(value || '').replace(/,/g, '').match(/\$?\s*([0-9]+(?:\.[0-9]+)?)/);
   const price = Number(match?.[1]);
   return Number.isFinite(price) ? price : null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
