@@ -21,7 +21,7 @@ import { applyBuy, reverseBuy } from './utils/buyTransactions';
 
 const dailyRiskAnalysisLimit = 3;
 const riskAnalysisCacheKey = 'gup-risk-analysis-cache-v2';
-const holdingNewsCacheKey = 'gup-holding-news-cache-v3';
+const holdingNewsCacheKey = 'gup-holding-news-cache-v4';
 const holdingNewsAiEnabledKey = 'gup-holding-news-ai-enabled-v1';
 const tabs: Tab[] = ['overview', 'holdings', 'trends', 'ask', 'import'];
 
