@@ -3397,7 +3397,7 @@ button {
 
 .returns-day em {
   font-style: normal;
-  color: #64748b;
+  color: #0f172a;
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
@@ -3420,23 +3420,21 @@ button {
   background: #ecfdf5;
 }
 
-.returns-day.pos em {
-  color: #047857;
+/* Date number stays black; only P&L value keeps pos/neg color. */
+.returns-day.pos em,
+.returns-day.neg em,
+.returns-day.flat em {
+  color: #0f172a;
 }
 
 .returns-day.neg {
   background: #fef2f2;
 }
 
-.returns-day.neg em {
-  color: #b91c1c;
-}
-
 .returns-day.flat {
   background: #f1f5f9;
 }
 
-.returns-day.flat em,
 .returns-day.flat strong {
   color: #94a3b8;
 }
