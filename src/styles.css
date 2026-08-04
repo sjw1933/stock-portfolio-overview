@@ -3164,17 +3164,17 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* Returns calendar — retail fund-style layout */
+/* Returns calendar — dense fund-style (ui-ux-pro-max density 9) */
 .returns-page {
-  gap: 10px;
+  gap: 8px;
 }
 
 .returns-card {
   display: grid;
-  gap: 12px;
-  padding: 14px 12px 12px;
+  gap: 8px;
+  padding: 12px 10px 10px;
   border: 0;
-  border-radius: 16px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: 0 1px 0 rgb(15 23 42 / 4%);
 }
@@ -3183,21 +3183,21 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .returns-card-head h2 {
   margin: 0;
-  color: #111827;
-  font-size: 17px;
+  color: #0f172a;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1.2;
 }
 
 .returns-card-head p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -3207,29 +3207,38 @@ button {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 999px;
-  background: #f3f4f6;
+  border-radius: 8px;
+  background: #f1f5f9;
   color: #64748b;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.returns-icon-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 .returns-icon-btn:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .returns-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .returns-pill-group,
 .returns-unit-group {
   display: inline-flex;
   align-items: center;
-  padding: 3px;
+  padding: 2px;
   border-radius: 999px;
-  background: #f3f4f6;
+  background: #f1f5f9;
 }
 
 .returns-pill-group {
@@ -3240,54 +3249,59 @@ button {
 .returns-pill-group button,
 .returns-unit-group button {
   flex: 1 1 0;
-  min-height: 30px;
-  min-width: 34px;
-  padding: 0 10px;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #6b7280;
-  font-size: 13px;
+  color: #64748b;
+  font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .returns-unit-group button {
   flex: 0 0 auto;
-  min-width: 36px;
-  font-size: 14px;
+  min-width: 34px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .returns-pill-group button.active,
 .returns-unit-group button.active {
   background: #fff;
-  color: #111827;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 10%);
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
 }
 
 .returns-month-nav {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
-  min-height: 40px;
+  min-height: 36px;
   border-radius: 999px;
-  background: #f3f4f6;
+  background: #f1f5f9;
   overflow: hidden;
 }
 
 .returns-month-nav button {
-  height: 40px;
+  height: 36px;
   border: 0;
   background: transparent;
-  color: #6b7280;
+  color: #64748b;
   display: grid;
   place-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .returns-month-nav strong {
   text-align: center;
-  color: #111827;
-  font-size: 15px;
+  color: #0f172a;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -3295,20 +3309,20 @@ button {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 4px 8px;
   padding: 0 2px;
 }
 
 .returns-strip span,
 .returns-strip em {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   font-style: normal;
 }
 
 .returns-strip b {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
@@ -3318,7 +3332,7 @@ button {
 .returns-period-card.pos b,
 .returns-detail-total.pos b,
 .returns-detail-values.pos strong {
-  color: #16a34a;
+  color: #059669;
 }
 
 .returns-strip.neg b,
@@ -3326,93 +3340,105 @@ button {
 .returns-period-card.neg b,
 .returns-detail-total.neg b,
 .returns-detail-values.neg strong {
-  color: #e11d48;
+  color: #dc2626;
 }
 
 .returns-strip.flat b,
 .returns-day.flat strong,
 .returns-period-card.flat b {
-  color: #9ca3af;
+  color: #94a3b8;
 }
 
 .returns-calendar {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .returns-weekdays,
 .returns-week {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
 }
 
 .returns-weekdays span {
   text-align: center;
-  color: #9ca3af;
-  font-size: 12px;
+  color: #94a3b8;
+  font-size: 11px;
   font-weight: 700;
-  padding: 2px 0 4px;
+  padding: 0 0 2px;
+  line-height: 1;
 }
 
+/* Compact cells: no aspect-ratio square. Visual density high, min height keeps tap usable. */
 .returns-day {
-  aspect-ratio: 1;
-  min-height: 0;
-  padding: 6px 2px 5px;
+  min-height: 40px;
+  height: 40px;
+  padding: 3px 1px 2px;
   border: 0;
-  border-radius: 10px;
-  background: #f3f4f6;
+  border-radius: 6px;
+  background: #f1f5f9;
   display: grid;
-  align-content: space-between;
+  align-content: center;
   justify-items: center;
-  gap: 2px;
+  gap: 1px;
   text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .returns-day.empty {
   background: transparent;
   pointer-events: none;
+  min-height: 40px;
+  height: 40px;
 }
 
 .returns-day em {
   font-style: normal;
-  color: #6b7280;
-  font-size: 12px;
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
 }
 
 .returns-day strong {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 1px;
 }
 
 .returns-day.pos {
-  background: #e8f8ef;
+  background: #ecfdf5;
 }
 
 .returns-day.pos em {
-  color: #15803d;
+  color: #047857;
 }
 
 .returns-day.neg {
-  background: #fdecef;
+  background: #fef2f2;
 }
 
 .returns-day.neg em {
-  color: #be123c;
+  color: #b91c1c;
 }
 
 .returns-day.flat {
-  background: #f3f4f6;
+  background: #f1f5f9;
 }
 
 .returns-day.flat em,
 .returns-day.flat strong {
-  color: #9ca3af;
+  color: #94a3b8;
 }
 
 .returns-day.today:not(.selected) {
@@ -3420,7 +3446,7 @@ button {
 }
 
 .returns-day.selected {
-  background: #6b7280 !important;
+  background: #475569 !important;
   box-shadow: none;
 }
 
@@ -3429,71 +3455,79 @@ button {
   color: #fff !important;
 }
 
+.returns-day:focus-visible {
+  outline: 2px solid #334155;
+  outline-offset: 1px;
+}
+
 .returns-period-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .returns-period-card {
   display: grid;
-  gap: 4px;
-  min-height: 76px;
-  padding: 12px 10px;
+  gap: 2px;
+  min-height: 64px;
+  padding: 10px 8px;
   border: 0;
-  border-radius: 12px;
-  background: #f3f4f6;
+  border-radius: 8px;
+  background: #f1f5f9;
   text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: box-shadow 160ms ease, background 160ms ease;
 }
 
 .returns-period-card span {
-  color: #6b7280;
-  font-size: 12px;
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .returns-period-card b {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
 
 .returns-period-card em {
   font-style: normal;
-  color: #9ca3af;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .returns-period-card.pos {
-  background: #e8f8ef;
+  background: #ecfdf5;
 }
 
 .returns-period-card.neg {
-  background: #fdecef;
+  background: #fef2f2;
 }
 
 .returns-period-card.selected {
-  outline: 2px solid #6b7280;
+  outline: 2px solid #475569;
   outline-offset: 0;
 }
 
 .returns-footnote,
 .returns-empty {
   margin: 0;
-  color: #9ca3af;
+  color: #94a3b8;
   font-size: 11px;
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .returns-empty {
-  padding: 20px 8px;
+  padding: 14px 8px;
   text-align: center;
 }
 
 .returns-detail-card {
-  gap: 10px;
+  gap: 8px;
 }
 
 .returns-detail-head-row {
@@ -3505,15 +3539,15 @@ button {
 
 .returns-detail-head-row h2 {
   margin: 0;
-  color: #111827;
-  font-size: 15px;
+  color: #0f172a;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.3;
 }
 
 .returns-detail-head-row h2 span {
-  color: #9ca3af;
-  font-size: 13px;
+  color: #94a3b8;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -3521,39 +3555,41 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 8px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #6b7280;
-  font-size: 12px;
+  color: #64748b;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .returns-detail-total {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: #f8fafc;
 }
 
 .returns-detail-total div {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .returns-detail-total span {
-  color: #9ca3af;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .returns-detail-total b {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
@@ -3569,9 +3605,9 @@ button {
 .returns-detail-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  padding: 12px 2px;
+  padding: 9px 2px;
   border-bottom: 1px solid #f1f5f9;
   background: transparent;
 }
@@ -3582,19 +3618,19 @@ button {
 
 .returns-detail-main {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
 .returns-detail-main b {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
-  color: #111827;
+  color: #0f172a;
 }
 
 .returns-detail-main span {
-  color: #9ca3af;
-  font-size: 12px;
+  color: #94a3b8;
+  font-size: 11px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3603,29 +3639,29 @@ button {
 
 .returns-detail-values {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   text-align: right;
   justify-items: end;
 }
 
 .returns-detail-values strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
 }
 
 .returns-detail-values em {
   font-style: normal;
-  color: #9ca3af;
-  font-size: 11px;
+  color: #94a3b8;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .returns-empty-state {
   display: grid !important;
   justify-items: center;
-  gap: 10px;
-  padding: 36px 12px !important;
+  gap: 8px;
+  padding: 28px 12px !important;
   border: 0 !important;
   color: #cbd5e1;
   text-align: center;
@@ -3633,23 +3669,29 @@ button {
 
 .returns-empty-state p {
   margin: 0;
-  color: #9ca3af;
-  font-size: 13px;
+  color: #94a3b8;
+  font-size: 12px;
   font-weight: 600;
 }
 
 @media (max-width: 390px) {
   .returns-day {
-    padding: 5px 1px 4px;
-    border-radius: 8px;
+    min-height: 38px;
+    height: 38px;
+    border-radius: 5px;
+  }
+
+  .returns-day.empty {
+    min-height: 38px;
+    height: 38px;
   }
 
   .returns-day em {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .returns-day strong {
-    font-size: 9px;
+    font-size: 8px;
   }
 
   .returns-period-grid {
@@ -3657,13 +3699,23 @@ button {
   }
 
   .returns-pill-group button {
-    padding: 0 8px;
-    font-size: 12px;
+    padding: 0 6px;
+    font-size: 11px;
   }
 
   .bottom-nav button {
     font-size: 10px;
     gap: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .returns-day,
+  .returns-icon-btn,
+  .returns-pill-group button,
+  .returns-unit-group button,
+  .returns-period-card {
+    transition: none;
   }
 }
 
