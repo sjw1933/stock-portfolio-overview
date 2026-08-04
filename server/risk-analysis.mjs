@@ -1495,6 +1495,195 @@ async function callAskLlm(input, aiConfig) {
   return callOpenAICompatibleAsk(input, aiConfig);
 }
 
+function normalizeOutlookBias(value) {
+  if (value === 'bullish' || value === 'bearish' || value === 'neutral') return value;
+  if (value === '偏多') return 'bullish';
+  if (value === '偏空') return 'bearish';
+  if (value === '震荡' || value === '中性') return 'neutral';
+  return null;
+}
+
+function normalizeOutlookConfidence(value) {
+  if (value === 'high' || value === 'medium' || value === 'low') return value;
+  if (value === '高') return 'high';
+  if (value === '中') return 'medium';
+  if (value === '低') return 'low';
+  return null;
+}
+
+function normalizeHoldingOutlookResult(result, ruleOutlook, model) {
+  const base = ruleOutlook && typeof ruleOutlook === 'object' ? ruleOutlook : {};
+  const baseItems = Array.isArray(base.items) ? base.items : [];
+  const aiItems = Array.isArray(result?.items) ? result.items : [];
+  const bySymbol = new Map(aiItems.map((item) => [String(item?.symbol || '').toUpperCase(), item]));
+
+  const items = baseItems.slice(0, 8).map((item) => {
+    const patch = bySymbol.get(String(item?.symbol || '').toUpperCase()) || {};
+    const bias = normalizeOutlookBias(patch.bias) || normalizeOutlookBias(item.bias) || 'neutral';
+    const confidence = normalizeOutlookConfidence(patch.confidence) || normalizeOutlookConfidence(item.confidence) || 'low';
+    const reasons = Array.isArray(patch.reasons)
+      ? patch.reasons.map((reason) => String(reason || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 3)
+      : Array.isArray(item.reasons) ? item.reasons.slice(0, 3) : [];
+    return {
+      symbol: String(item.symbol || '').slice(0, 24),
+      name: String(item.name || item.symbol || '').slice(0, 40),
+      type: String(item.type || '个股').slice(0, 16),
+      bias,
+      confidence,
+      score: Number.isFinite(Number(patch.score)) ? Number(patch.score) : Number(item.score) || 0,
+      todayRate: item.todayRate == null ? null : Number(item.todayRate),
+      weight: Number(item.weight) || 0,
+      reasons: reasons.length ? reasons : ['模型未给出理由，保留规则信号'],
+    };
+  });
+
+  const bullishCount = items.filter((item) => item.bias === 'bullish').length;
+  const bearishCount = items.filter((item) => item.bias === 'bearish').length;
+  const neutralCount = items.filter((item) => item.bias === 'neutral').length;
+  const bias = normalizeOutlookBias(result?.bias) || normalizeOutlookBias(base.bias) || 'neutral';
+  const confidence = normalizeOutlookConfidence(result?.confidence) || normalizeOutlookConfidence(base.confidence) || 'low';
+  const summary = String(result?.summary || base.summary || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 320);
+
+  return {
+    bias,
+    confidence,
+    score: Number.isFinite(Number(result?.score)) ? Number(result.score) : Number(base.score) || 0,
+    summary: summary || '模型已完成持仓短线复盘，请结合盘口自行判断。',
+    sessionLabel: String(base.sessionLabel || '盘中'),
+    items,
+    bullishCount,
+    bearishCount,
+    neutralCount,
+    source: 'ai',
+    model: String(model || openaiModel).slice(0, 80),
+  };
+}
+
+function buildOutlookPrompt(payload) {
+  const ruleOutlook = payload?.ruleOutlook || {};
+  const compact = {
+    quoteViewSession: payload?.quoteViewSession || 'regular',
+    marketSession: payload?.marketSession || 'closed',
+    currency: payload?.currency || 'USD',
+    sessionLabel: ruleOutlook.sessionLabel,
+    ruleBias: ruleOutlook.bias,
+    ruleConfidence: ruleOutlook.confidence,
+    ruleSummary: ruleOutlook.summary,
+    holdings: (Array.isArray(ruleOutlook.items) ? ruleOutlook.items : []).slice(0, 8).map((item) => ({
+      symbol: item.symbol,
+      name: item.name,
+      type: item.type,
+      weight: item.weight,
+      todayRate: item.todayRate,
+      ruleBias: item.bias,
+      ruleConfidence: item.confidence,
+      ruleReasons: item.reasons,
+    })),
+  };
+
+  return `你是谨慎的个人持仓短线复盘助手，不是荐股机器人。请基于结构化持仓数据，对「今日/当前时段」走势做方向预判。
+
+硬性要求：
+- 只输出 JSON，不要 Markdown。
+- 使用中文。
+- 不得给出确定性买卖指令，不得承诺收益，不要说必涨/必跌。
+- 只能基于提供的数据做解释性预判；信息不足就降低信心。
+- 可参考 ruleBias/ruleReasons，但可以修正不合理规则结果并说明原因。
+- bias 只能是 bullish|bearish|neutral。
+- confidence 只能是 high|medium|low。
+- items 必须覆盖输入里的每个 symbol，reasons 每项 1-3 条，每条不超过 40 字。
+
+输出格式：
+{
+  "bias":"bullish|bearish|neutral",
+  "confidence":"high|medium|low",
+  "score":0,
+  "summary":"一句话组合预判",
+  "items":[{"symbol":"AAPL.US","bias":"bullish","confidence":"medium","score":1.2,"reasons":["理由1","理由2"]}]
+}
+
+输入数据：
+${JSON.stringify(compact)}`;
+}
+
+async function callOpenAICompatibleOutlook(payload, aiConfig) {
+  const config = activeOpenAi(aiConfig);
+  if (!config.apiKey.trim()) throw new Error('OPENAI_API_KEY is not configured');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: 0.25,
+        max_tokens: 1200,
+        messages: [
+          { role: 'system', content: '你是谨慎的个人持仓短线复盘助手。只基于用户数据输出 JSON 预判，不给确定性投资建议。' },
+          { role: 'user', content: buildOutlookPrompt(payload) },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+    const body = await response.json();
+    const text = body?.choices?.[0]?.message?.content || '';
+    return normalizeHoldingOutlookResult(extractJson(text), payload?.ruleOutlook, config.model);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callAnthropicOutlook(payload, aiConfig) {
+  const config = activeAnthropic(aiConfig);
+  if (!config.apiKey.trim()) throw new Error('ANTHROPIC_API_KEY is not configured');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  try {
+    const response = await fetch(`${config.baseUrl}/v1/messages`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 1200,
+        temperature: 0.25,
+        messages: [{ role: 'user', content: buildOutlookPrompt(payload) }],
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`LLM HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+    const body = await response.json();
+    const text = body?.content?.map((part) => part?.text || '').join('\n') || '';
+    return normalizeHoldingOutlookResult(extractJson(text), payload?.ruleOutlook, config.model);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callOutlookLlm(payload, aiConfig) {
+  if (activeProvider(aiConfig) === 'anthropic') return callAnthropicOutlook(payload, aiConfig);
+  return callOpenAICompatibleOutlook(payload, aiConfig);
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return sendJson(res, 204, {});
   if (req.method === 'GET' && req.url === '/health') {
@@ -1564,6 +1753,34 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { code: 0, data: result });
     } catch (error) {
       return sendJson(res, 400, { code: 400, message: error instanceof Error ? error.message : 'holding news failed', data: null });
+    }
+  }
+  if (req.method === 'POST' && req.url === '/api/holding-outlook') {
+    try {
+      const payload = JSON.parse(await readBody(req) || '{}');
+      const ruleOutlook = payload?.ruleOutlook;
+      if (!ruleOutlook || !Array.isArray(ruleOutlook.items) || !ruleOutlook.items.length) {
+        return sendJson(res, 400, { code: 400, message: 'ruleOutlook.items is empty', data: null });
+      }
+      const aiConfig = normalizeAiConfig(payload);
+      try {
+        const result = await callOutlookLlm(payload, aiConfig);
+        return sendJson(res, 200, { code: 0, data: result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'holding outlook failed';
+        console.warn(message);
+        return sendJson(res, 200, {
+          code: 0,
+          data: {
+            ...ruleOutlook,
+            source: 'fallback',
+            model: '',
+            summary: `${String(ruleOutlook.summary || '规则预判可用。')}（AI 暂不可用：${message.slice(0, 80)}）`,
+          },
+        });
+      }
+    } catch (error) {
+      return sendJson(res, 400, { code: 400, message: error instanceof Error ? error.message : 'holding outlook failed', data: null });
     }
   }
   if (req.method !== 'POST' || req.url !== '/api/risk-analysis') {

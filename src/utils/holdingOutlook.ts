@@ -27,6 +27,9 @@ export type PortfolioOutlook = {
   bullishCount: number;
   bearishCount: number;
   neutralCount: number;
+  /** rule = local heuristics; ai = LLM enhanced; fallback = AI failed then rules */
+  source?: 'rule' | 'ai' | 'fallback';
+  model?: string;
 };
 
 type BuildOutlookInput = {
@@ -84,7 +87,70 @@ export function buildPortfolioOutlook(input: BuildOutlookInput): PortfolioOutloo
     bullishCount,
     bearishCount,
     neutralCount,
+    source: 'rule',
   };
+}
+
+export function mergeAiOutlook(
+  base: PortfolioOutlook,
+  ai: Partial<PortfolioOutlook> & { items?: Array<Partial<HoldingOutlookItem> & { symbol?: string }> },
+  model: string,
+): PortfolioOutlook {
+  const bySymbol = new Map((ai.items || []).map((item) => [String(item.symbol || '').toUpperCase(), item]));
+  const items = base.items.map((item) => {
+    const patch = bySymbol.get(item.symbol.toUpperCase());
+    if (!patch) return item;
+    const bias = normalizeBias(patch.bias) ?? item.bias;
+    const confidence = normalizeConfidence(patch.confidence) ?? item.confidence;
+    const reasons = Array.isArray(patch.reasons)
+      ? patch.reasons.map((reason) => String(reason || '').trim()).filter(Boolean).slice(0, 3)
+      : item.reasons;
+    return {
+      ...item,
+      bias,
+      confidence,
+      reasons: reasons.length ? reasons : item.reasons,
+      score: typeof patch.score === 'number' && Number.isFinite(patch.score) ? patch.score : item.score,
+    };
+  });
+
+  const bullishCount = items.filter((item) => item.bias === 'bullish').length;
+  const bearishCount = items.filter((item) => item.bias === 'bearish').length;
+  const neutralCount = items.filter((item) => item.bias === 'neutral').length;
+  const bias = normalizeBias(ai.bias) ?? scoreToBias(items.reduce((sum, item) => sum + item.score * (item.weight / 100), 0));
+  const confidence = normalizeConfidence(ai.confidence) ?? base.confidence;
+  const summary = String(ai.summary || '').replace(/\s+/g, ' ').trim().slice(0, 280)
+    || `${base.sessionLabel}口径 AI 预判：组合整体${biasLabel(bias)}（信心${confidenceLabel(confidence)}）。`;
+
+  return {
+    ...base,
+    bias,
+    confidence,
+    summary: summary.includes('投资建议') ? summary : `${summary} 模型辅助，仅供复盘参考。`,
+    items,
+    bullishCount,
+    bearishCount,
+    neutralCount,
+    source: 'ai',
+    model,
+    score: typeof ai.score === 'number' && Number.isFinite(ai.score) ? ai.score : base.score,
+  };
+}
+
+function normalizeBias(value: unknown): OutlookBias | null {
+  if (value === 'bullish' || value === 'bearish' || value === 'neutral') return value;
+  if (value === '偏多') return 'bullish';
+  if (value === '偏空') return 'bearish';
+  if (value === '震荡' || value === '中性') return 'neutral';
+  return null;
+}
+
+function normalizeConfidence(value: unknown): OutlookConfidence | null {
+  if (value === 'high' || value === 'medium' || value === 'low') return value;
+  if (value === '高') return 'high';
+  if (value === '中') return 'medium';
+  if (value === '低') return 'low';
+  return null;
 }
 
 function buildHoldingOutlook(
