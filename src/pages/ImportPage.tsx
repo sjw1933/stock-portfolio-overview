@@ -5,13 +5,15 @@ import { PanelTitle } from '../components/PanelTitle';
 import type { AppContext } from '../appContext';
 import type { AccountSnapshot, Broker, Holding, SnapshotDraft } from '../types';
 import { recognizeSnapshot } from '../utils/ocrSnapshot';
+import { currencyForMarket, marketLabel } from '../utils/currency';
 import { fetchSecurityQuote, normalizeSecuritySymbol } from '../utils/quotes';
 import { holdingKey } from '../utils/sellTransactions';
 
 const brokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'] as const;
-const markets = ['US', 'HK'] as const;
+const markets = ['US', 'HK', 'CN'] as const;
 const holdingTypes = ['个股', 'ETF', '杠杆ETF'] as const;
-const currencies = ['USD', 'HKD'] as const;
+const currencies = ['USD', 'HKD', 'CNY'] as const;
+
 
 type ManualHolding = {
   id: string;
@@ -208,7 +210,18 @@ export function ImportPage({ context }: { context: AppContext }) {
                 <div className="draft-fields manual-account-fields">
                   <SelectField label="券商" value={group.broker} options={brokers} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { broker: value as Broker })} />
                   <TextField label="账户名称" value={group.account} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { account: value })} />
-                  <SelectField label="市场" value={group.market} options={markets} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { market: value as Holding['market'], currency: value === 'HK' ? 'HKD' : 'USD' })} />
+                  <label>
+                    市场
+                    <select
+                      value={group.market}
+                      onChange={(event) => {
+                        const market = event.target.value as Holding['market'];
+                        patchManualAccount(setManualAccounts, group.id, { market, currency: currencyForMarket(market) });
+                      }}
+                    >
+                      {markets.map((item) => <option key={item} value={item}>{marketLabel(item)}</option>)}
+                    </select>
+                  </label>
                   <SelectField label="结算币种" value={group.currency} options={currencies} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { currency: value as Holding['currency'] })} />
                   <OptionalNumberField label="账户净值（选填）" value={group.netAsset} step="0.01" onChange={(value) => patchManualAccount(setManualAccounts, group.id, { netAsset: value })} />
                 </div>
@@ -365,7 +378,12 @@ function DraftHoldings({ draft, setDraft }: DraftProps) {
       <article className="draft-row" key={`${row.symbol}-${index}`}><div className="draft-row-head"><b>{row.name || row.symbol || `持仓 ${index + 1}`}</b><button onClick={() => setDraft(removeHolding(draft, index))} aria-label="删除持仓"><Trash2 size={16} /></button></div><div className="draft-fields">
         <SelectField label="券商" value={row.broker} options={brokers} onChange={(value) => setDraft(updateHolding(draft, index, { broker: value as Holding['broker'] }))} />
         <TextField label="账户" value={row.account} onChange={(value) => setDraft(updateHolding(draft, index, { account: value }))} />
-        <SelectField label="市场" value={row.market} options={markets} onChange={(value) => setDraft(updateHolding(draft, index, { market: value as Holding['market'] }))} />
+        <label>
+          市场
+          <select value={row.market} onChange={(event) => setDraft(updateHolding(draft, index, { market: event.target.value as Holding['market'], currency: currencyForMarket(event.target.value as Holding['market']) }))}>
+            {markets.map((item) => <option key={item} value={item}>{marketLabel(item)}</option>)}
+          </select>
+        </label>
         <SelectField label="类型" value={row.type} options={holdingTypes} onChange={(value) => setDraft(updateHolding(draft, index, { type: value as Holding['type'] }))} />
         <TextField label="名称" value={row.name} onChange={(value) => setDraft(updateHolding(draft, index, { name: value }))} />
         <TextField label="代码" value={row.symbol} onChange={(value) => setDraft(updateHolding(draft, index, { symbol: value.toUpperCase() }))} />
@@ -385,7 +403,12 @@ function DraftAccounts({ draft, setDraft }: DraftProps) {
       <article className="draft-row" key={`${row.account}-${index}`}><div className="draft-row-head"><b>{row.account || `账户 ${index + 1}`}</b><button onClick={() => setDraft(removeAccount(draft, index))} aria-label="删除账户"><Trash2 size={16} /></button></div><div className="draft-fields">
         <SelectField label="券商" value={row.broker} options={brokers} onChange={(value) => setDraft(updateAccount(draft, index, { broker: value }))} />
         <TextField label="账户" value={row.account} onChange={(value) => setDraft(updateAccount(draft, index, { account: value }))} />
-        <SelectField label="市场" value={row.market} options={markets} onChange={(value) => setDraft(updateAccount(draft, index, { market: value as AccountSnapshot['market'] }))} />
+        <label>
+          市场
+          <select value={row.market} onChange={(event) => setDraft(updateAccount(draft, index, { market: event.target.value as AccountSnapshot['market'], currency: currencyForMarket(event.target.value as Holding['market']) }))}>
+            {markets.map((item) => <option key={item} value={item}>{marketLabel(item)}</option>)}
+          </select>
+        </label>
         <SelectField label="币种" value={row.currency} options={currencies} onChange={(value) => setDraft(updateAccount(draft, index, { currency: value as AccountSnapshot['currency'] }))} />
         <NumberField label="账户净值" value={row.netAsset} step="0.01" onChange={(value) => setDraft(updateAccount(draft, index, { netAsset: value }))} />
       </div></article>

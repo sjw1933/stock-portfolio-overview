@@ -160,7 +160,7 @@ function matchesNewsSymbol(item: HoldingNewsItem, symbol: string) {
 }
 
 function shortSymbol(symbol: string) {
-  return symbol.replace(/\.US$|\.HK$/, '');
+  return symbol.replace(/\.US$|\.HK$|\.SH$|\.SS$|\.SZ$/, '');
 }
 
 function formatFetchedAt(value: string) {

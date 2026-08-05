@@ -343,7 +343,7 @@ async function fetchYahooQuotes(
 
 export async function fetchSecurityQuote(symbol: string, market: Holding['market'], signal?: AbortSignal): Promise<QuoteSnapshot> {
   const normalized = normalizeSecuritySymbol(symbol, market);
-  const currency = market === 'HK' ? 'HKD' : 'USD';
+  const currency = market === 'HK' ? 'HKD' : market === 'CN' ? 'CNY' : 'USD';
   const holding: Holding = {
     broker: '盈立证券',
     account: '行情查询',
@@ -365,11 +365,39 @@ export async function fetchSecurityQuote(symbol: string, market: Holding['market
 }
 
 export function normalizeSecuritySymbol(symbol: string, market: Holding['market']) {
-  const raw = symbol.trim().toUpperCase();
+  const raw = symbol.trim().toUpperCase().replace(/\s+/g, '');
   if (!raw) return '';
-  if (/\.(US|HK)$/.test(raw)) return raw;
+  // Already-qualified tickers.
+  if (/\.US$/.test(raw)) return raw;
+  if (/\.HK$/.test(raw)) return raw.replace(/^(\d{1,5})\.HK$/, (_, code: string) => `${code.padStart(5, '0')}.HK`);
+  if (/\.SS$/.test(raw)) return raw.replace(/\.SS$/, '.SH');
+  if (/\.(SH|SZ)$/.test(raw)) return raw;
+
   if (market === 'HK' && /^\d{1,5}$/.test(raw)) return `${raw.padStart(5, '0')}.HK`;
-  return `${raw}.US`;
+
+  // A-shares: 6-digit codes → Shanghai (.SH) or Shenzhen (.SZ).
+  if (market === 'CN' && /^\d{6}$/.test(raw)) {
+    if (raw.startsWith('6') || raw.startsWith('5') || raw.startsWith('9')) return `${raw}.SH`;
+    return `${raw}.SZ`;
+  }
+
+  if (market === 'CN') return raw.includes('.') ? raw : `${raw}.SH`;
+  if (market === 'HK') return raw.includes('.') ? raw : `${raw}.HK`;
+  return raw.includes('.') ? raw : `${raw}.US`;
+}
+
+export function inferMarketFromSymbol(symbol: string): Holding['market'] {
+  const raw = symbol.trim().toUpperCase();
+  if (/\.HK$/.test(raw)) return 'HK';
+  if (/\.(SH|SS|SZ)$/.test(raw)) return 'CN';
+  return 'US';
+}
+
+export function inferCurrencyFromSymbol(symbol: string): Holding['currency'] {
+  const market = inferMarketFromSymbol(symbol);
+  if (market === 'HK') return 'HKD';
+  if (market === 'CN') return 'CNY';
+  return 'USD';
 }
 
 function tencentQuoteSymbols(symbol: string) {

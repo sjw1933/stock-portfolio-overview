@@ -26,7 +26,7 @@ const palette = [
 ];
 
 function shortSymbol(symbol: string) {
-  return symbol.replace(/\.US$|\.HK$/i, '');
+  return symbol.replace(/\.US$|\.HK$|\.SH$|\.SS$|\.SZ$/i, '');
 }
 
 type PieSlice = {

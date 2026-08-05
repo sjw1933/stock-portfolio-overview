@@ -19,14 +19,17 @@ export type AiApiConfig = {
   model: string;
 };
 
+export type Market = 'US' | 'HK' | 'CN';
+export type HoldingCurrency = 'USD' | 'HKD' | 'CNY';
+
 export type Holding = {
   broker: Broker;
   account: string;
-  market: 'US' | 'HK';
+  market: Market;
   type: '个股' | 'ETF' | '杠杆ETF';
   name: string;
   symbol: string;
-  currency: 'USD' | 'HKD';
+  currency: HoldingCurrency;
   qty: number;
   price: number;
   cost: number;
@@ -161,8 +164,8 @@ export type ImportAuditRecord = {
 export type AccountSnapshot = {
   broker: string;
   account: string;
-  market: 'US' | 'HK';
-  currency: 'USD' | 'HKD';
+  market: Market;
+  currency: HoldingCurrency;
   netAsset: number;
 };
 

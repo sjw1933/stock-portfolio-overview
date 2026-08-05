@@ -260,11 +260,11 @@ function normalizeSharedHolding(item) {
   return {
     broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
-    market: sanitizeEnum(item?.market, ['US', 'HK'], symbol.endsWith('.HK') ? 'HK' : 'US'),
+    market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     type: sanitizeEnum(item?.type, ['个股', 'ETF', '杠杆ETF'], '个股'),
     name: String(item?.name || symbol).trim().slice(0, 80),
     symbol,
-    currency: sanitizeEnum(item?.currency, ['USD', 'HKD'], symbol.endsWith('.US') ? 'USD' : 'HKD'),
+    currency: sanitizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], symbol.endsWith('.US') ? 'USD' : (symbol.endsWith('.HK') ? 'HKD' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CNY' : 'HKD'))),
     qty,
     price,
     cost,
@@ -280,8 +280,8 @@ function normalizeSharedAccount(item) {
   return {
     broker: String(item?.broker || '盈立证券').trim().slice(0, 40),
     account: account.slice(0, 80),
-    market: sanitizeEnum(item?.market, ['US', 'HK'], 'US'),
-    currency: sanitizeEnum(item?.currency, ['USD', 'HKD'], 'HKD'),
+    market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], 'US'),
+    currency: sanitizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], 'HKD'),
     netAsset,
   };
 }
@@ -308,11 +308,11 @@ function normalizeSellRecord(item) {
     status: item?.status === 'reversed' ? 'reversed' : 'active',
     broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
-    market: sanitizeEnum(item?.market, ['US', 'HK'], symbol.endsWith('.HK') ? 'HK' : 'US'),
+    market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     holdingType: sanitizeEnum(item?.holdingType, ['个股', 'ETF', '杠杆ETF'], '个股'),
     name: String(item?.name || symbol).trim().slice(0, 80),
     symbol,
-    currency: sanitizeEnum(item?.currency, ['USD', 'HKD'], symbol.endsWith('.US') ? 'USD' : 'HKD'),
+    currency: sanitizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], symbol.endsWith('.US') ? 'USD' : (symbol.endsWith('.HK') ? 'HKD' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CNY' : 'HKD'))),
     qty,
     price,
     costAtSell,
@@ -355,11 +355,11 @@ function normalizeBuyRecord(item) {
     status: item?.status === 'reversed' ? 'reversed' : 'active',
     broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
-    market: sanitizeEnum(item?.market, ['US', 'HK'], symbol.endsWith('.HK') ? 'HK' : 'US'),
+    market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     holdingType: sanitizeEnum(item?.holdingType, ['个股', 'ETF', '杠杆ETF'], '个股'),
     name: String(item?.name || symbol).trim().slice(0, 80),
     symbol,
-    currency: sanitizeEnum(item?.currency, ['USD', 'HKD'], symbol.endsWith('.US') ? 'USD' : 'HKD'),
+    currency: sanitizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], symbol.endsWith('.US') ? 'USD' : (symbol.endsWith('.HK') ? 'HKD' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CNY' : 'HKD'))),
     qty,
     price,
     fees,
@@ -1260,11 +1260,11 @@ function normalizeOcrDraft(result) {
   const holdings = Array.isArray(result?.holdings) ? result.holdings.slice(0, 50).map((item) => ({
     broker: normalizeEnum(item?.broker, supportedBrokers, '盈立证券'),
     account: String(item?.account || '').slice(0, 40),
-    market: normalizeEnum(item?.market, ['US', 'HK'], 'HK'),
+    market: normalizeEnum(item?.market, ['US', 'HK', 'CN'], 'HK'),
     type: normalizeEnum(item?.type, ['个股', 'ETF', '杠杆ETF'], 'ETF'),
     name: String(item?.name || '').slice(0, 40),
     symbol: normalizeSymbol(item?.symbol),
-    currency: normalizeEnum(item?.currency, ['USD', 'HKD'], 'HKD'),
+    currency: normalizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], 'HKD'),
     qty: asNumber(item?.qty),
     price: asNumber(item?.price),
     cost: asNumber(item?.cost),
@@ -1275,8 +1275,8 @@ function normalizeOcrDraft(result) {
   const accountSnapshots = Array.isArray(result?.accountSnapshots) ? result.accountSnapshots.slice(0, 20).map((item) => ({
     broker: normalizeEnum(item?.broker, supportedBrokers, '盈立证券'),
     account: String(item?.account || '').slice(0, 40),
-    market: normalizeEnum(item?.market, ['US', 'HK'], 'HK'),
-    currency: normalizeEnum(item?.currency, ['USD', 'HKD'], 'HKD'),
+    market: normalizeEnum(item?.market, ['US', 'HK', 'CN'], 'HK'),
+    currency: normalizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], 'HKD'),
     netAsset: asNumber(item?.netAsset),
     sourceImage: String(item?.sourceImage || '').slice(0, 120),
     warnings: normalizeStringArray(item?.warnings, 5, 80),
@@ -1299,8 +1299,17 @@ function normalizeEnum(value, allowed, fallback) {
 
 function normalizeSymbol(value) {
   const text = String(value || '').trim().toUpperCase().replace(/\s+/g, '');
-  if (/^\d{5}\.HK$/.test(text)) return text;
-  if (/^\d{5}$/.test(text)) return `${text}.HK`;
+  if (/^\d{1,5}\.HK$/.test(text)) {
+    const code = text.replace(/\.HK$/, '').padStart(5, '0');
+    return `${code}.HK`;
+  }
+  if (/^\d{1,5}$/.test(text) && text.length <= 5 && !/^\d{6}$/.test(text)) return `${text.padStart(5, '0')}.HK`;
+  if (/^\d{6}\.SS$/.test(text)) return text.replace(/\.SS$/, '.SH');
+  if (/^\d{6}\.(SH|SZ)$/.test(text)) return text;
+  if (/^\d{6}$/.test(text)) {
+    if (text.startsWith('6') || text.startsWith('5') || text.startsWith('9')) return `${text}.SH`;
+    return `${text}.SZ`;
+  }
   if (/^[A-Z.\-]{1,10}\.US$/.test(text)) return text;
   if (/^[A-Z.\-]{1,10}$/.test(text)) return `${text}.US`;
   return text.slice(0, 24);
@@ -1662,7 +1671,7 @@ async function callOpenAIOcr(images, aiConfig) {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ocrTimeoutMs);
-  const prompt = `请从这些券商截图中识别个人持仓快照。只输出 JSON，不要 Markdown。\n\n支持券商：${supportedBrokerText}。\n\n识别要求：\n- 合并多张截图的信息，去重明显重复的持仓。\n- 只基于截图内容，不要猜测截图中没有的字段。\n- 数字必须保留小数，注意数量、现价、成本价、账户净值不要串列。\n- 港股代码输出为 00936.HK、300323.SZ 这种市场后缀格式；美股输出 AAPL.US、QQQ.US、VOO.US 这种格式。\n- broker 只能是 ${supportedBrokerText}。\n- market 只能是 US 或 HK；currency 只能是 USD 或 HKD。\n- type 只能是 个股、ETF、杠杆ETF。\n- 对不确定字段写入该行 warnings。\n\n输出格式：\n{\n  "summary":"一句话说明识别结果",\n  "holdings":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK","type":"个股|ETF|杠杆ETF","name":"名称","symbol":"代码","currency":"USD|HKD","qty":0,"price":0,"cost":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "accountSnapshots":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK","currency":"USD|HKD","netAsset":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "warnings":["整体注意事项"]\n}`;
+  const prompt = `请从这些券商截图中识别个人持仓快照。只输出 JSON，不要 Markdown。\n\n支持券商：${supportedBrokerText}。\n\n识别要求：\n- 合并多张截图的信息，去重明显重复的持仓。\n- 只基于截图内容，不要猜测截图中没有的字段。\n- 数字必须保留小数，注意数量、现价、成本价、账户净值不要串列。\n- 港股代码输出为 00936.HK；A股输出 601208.SH、000001.SZ；美股输出 AAPL.US、QQQ.US 这种格式。\n- broker 只能是 ${supportedBrokerText}。\n- market 只能是 US、HK 或 CN（大A）；currency 只能是 USD、HKD 或 CNY。\n- type 只能是 个股、ETF、杠杆ETF。\n- 对不确定字段写入该行 warnings。\n\n输出格式：\n{\n  "summary":"一句话说明识别结果",\n  "holdings":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","type":"个股|ETF|杠杆ETF","name":"名称","symbol":"代码","currency":"USD|HKD|CNY","qty":0,"price":0,"cost":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "accountSnapshots":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","currency":"USD|HKD|CNY","netAsset":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "warnings":["整体注意事项"]\n}`;
 
   try {
     const content = [

@@ -436,7 +436,7 @@ function DetailRow({
   return (
     <li>
       <div className="returns-detail-main">
-        <b>{row.symbol.replace(/\.US$|\.HK$/i, '')}</b>
+        <b>{row.symbol.replace(/\.US$|\.HK$|\.SH$|\.SS$|\.SZ$/i, '')}</b>
         <span>{row.name}</span>
       </div>
       <div className={`returns-detail-values ${toneClass(row.pnlUsd)}`}>

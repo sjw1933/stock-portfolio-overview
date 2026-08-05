@@ -1,11 +1,24 @@
-import type { Currency } from '../types';
+import type { Currency, HoldingCurrency, Market } from '../types';
 
+/** HKD value of 1 unit of each currency (approximate board rates). */
 export const rates: Record<Currency, number> = { HKD: 1, USD: 7.82, CNY: 1.09 };
 export const currencyMarks: Record<Currency, string> = { HKD: 'HK$', USD: '$', CNY: '¥' };
 
-export function convert(amount: number, from: 'USD' | 'HKD', to: Currency) {
-  const hkd = from === 'USD' ? amount * rates.USD : amount;
-  return hkd / rates[to];
+export function convert(amount: number, from: HoldingCurrency | Currency, to: Currency) {
+  const fromRate = rates[from as Currency] ?? rates.HKD;
+  return (amount * fromRate) / rates[to];
+}
+
+export function currencyForMarket(market: Market): HoldingCurrency {
+  if (market === 'HK') return 'HKD';
+  if (market === 'CN') return 'CNY';
+  return 'USD';
+}
+
+export function marketLabel(market: Market) {
+  if (market === 'HK') return '港股';
+  if (market === 'CN') return '大A';
+  return '美股';
 }
 
 export function money(amount: number, currency: Currency, masked: boolean) {

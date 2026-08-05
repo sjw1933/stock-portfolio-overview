@@ -2,10 +2,12 @@ import { ArrowLeft, Check, Search, TrendingUp, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { AppContext } from '../appContext';
 import type { Broker, BuyInput, Holding } from '../types';
+import { currencyForMarket, marketLabel } from '../utils/currency';
 import { fetchSecurityQuote, normalizeSecuritySymbol } from '../utils/quotes';
 
 const brokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'] as const;
 const holdingTypes = ['个股', 'ETF', '杠杆ETF'] as const;
+const markets: Holding['market'][] = ['US', 'HK', 'CN'];
 
 type AccountOption = Pick<Holding, 'broker' | 'account' | 'market' | 'currency'>;
 
@@ -33,7 +35,7 @@ export function BuyTradeSheet({ context, holding, onClose }: { context: AppConte
   const selectedAccount = holding
     ? accountFromHolding(holding)
     : accountChoice === '__new__'
-      ? { broker: newBroker, account: newAccount, market: newMarket, currency: newMarket === 'HK' ? 'HKD' as const : 'USD' as const }
+      ? { broker: newBroker, account: newAccount, market: newMarket, currency: currencyForMarket(newMarket) }
       : accountOptions.find((item) => accountKey(item) === accountChoice) ?? initialAccount;
   const normalizedSymbol = normalizeSecuritySymbol(symbol, selectedAccount?.market ?? 'US');
   const existing = selectedAccount
@@ -117,8 +119,39 @@ export function BuyTradeSheet({ context, holding, onClose }: { context: AppConte
           <>
             {!holding && (
               <div className="buy-account-block">
-                <label>券商账户<select value={accountChoice} onChange={(event) => setAccountChoice(event.target.value)}>{accountOptions.map((item) => <option key={accountKey(item)} value={accountKey(item)}>{item.broker} · {item.account} · {item.market}</option>)}<option value="__new__">新增账户</option></select></label>
-                {accountChoice === '__new__' && <div className="sell-form-grid new-account-fields"><label>券商<select value={newBroker} onChange={(event) => setNewBroker(event.target.value as Broker)}>{brokers.map((item) => <option key={item}>{item}</option>)}</select></label><label>账户名称<input value={newAccount} onChange={(event) => setNewAccount(event.target.value)} /></label><label>市场<select value={newMarket} onChange={(event) => setNewMarket(event.target.value as Holding['market'])}><option value="US">美股</option><option value="HK">港股</option></select></label></div>}
+                <label>
+                  券商账户
+                  <select value={accountChoice} onChange={(event) => setAccountChoice(event.target.value)}>
+                    {accountOptions.map((item) => (
+                      <option key={accountKey(item)} value={accountKey(item)}>
+                        {item.broker} · {item.account} · {marketLabel(item.market)}
+                      </option>
+                    ))}
+                    <option value="__new__">新增账户</option>
+                  </select>
+                </label>
+                {accountChoice === '__new__' && (
+                  <div className="sell-form-grid new-account-fields">
+                    <label>
+                      券商
+                      <select value={newBroker} onChange={(event) => setNewBroker(event.target.value as Broker)}>
+                        {brokers.map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      账户名称
+                      <input value={newAccount} onChange={(event) => setNewAccount(event.target.value)} />
+                    </label>
+                    <label>
+                      市场
+                      <select value={newMarket} onChange={(event) => setNewMarket(event.target.value as Holding['market'])}>
+                        {markets.map((item) => (
+                          <option key={item} value={item}>{marketLabel(item)}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
               </div>
             )}
             <div className="sell-position-summary buy-position-summary">

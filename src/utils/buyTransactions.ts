@@ -1,4 +1,5 @@
 import type { BuyInput, BuyRecord, Holding, SavedSnapshot, SellRecord } from '../types';
+import { normalizeSecuritySymbol } from './quotes';
 import { holdingKey } from './sellTransactions';
 
 const quantityEpsilon = 0.0000001;
@@ -150,11 +151,7 @@ function hasLaterActiveTrade(buys: BuyRecord[], sells: SellRecord[], record: Buy
 }
 
 function normalizeSymbol(value: string, market: Holding['market']) {
-  const raw = value.trim().toUpperCase();
-  if (!raw) return '';
-  if (/\.(US|HK)$/.test(raw)) return raw;
-  if (market === 'HK' && /^\d{1,5}$/.test(raw)) return `${raw.padStart(5, '0')}.HK`;
-  return `${raw}.US`;
+  return normalizeSecuritySymbol(value, market);
 }
 
 function accountKey(holding: Pick<Holding, 'broker' | 'account' | 'market'>) {

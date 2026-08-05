@@ -174,7 +174,7 @@ export function TrendsPage({ context }: { context: AppContext }) {
 }
 
 function isMinuteCapable(symbol: string) {
-  return symbol.endsWith('.HK') || symbol.endsWith('.US');
+  return /\.(HK|US|SH|SS|SZ)$/i.test(symbol);
 }
 
 function MarketChart({ series, name, cost, buyRecords, sellRecords }: { series: TrendSeries; name: string; cost?: number; buyRecords: BuyRecord[]; sellRecords: SellRecord[] }) {

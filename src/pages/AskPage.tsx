@@ -222,7 +222,7 @@ function buildSuggestedPrompts(profile: DataProfile) {
   const largest = profile.largestHolding;
   const loss = profile.largestLoss;
   const marketLeader = [...profile.marketWeights].sort((a, b) => b.weight - a.weight)[0];
-  const marketLabel = marketLeader?.market === 'US' ? '美股' : marketLeader?.market === 'HK' ? '港股' : '市场';
+  const marketLabel = marketLeader?.market === 'US' ? '美股' : marketLeader?.market === 'HK' ? '港股' : marketLeader?.market === 'CN' ? '大A' : '市场';
   const refreshLabel = profile.quoteStatus === 'live' ? '实时行情' : profile.quoteStatus === 'refreshing' ? '刷新中' : '截图价';
 
   return [
@@ -323,7 +323,7 @@ function answerLoss(profile: DataProfile) {
 }
 
 function answerAllocation(profile: DataProfile) {
-  const allocation = profile.marketWeights.map((item) => `${item.market === 'US' ? '美股' : '港股'}约 ${item.weight.toFixed(1)}%`).join('，');
+  const allocation = profile.marketWeights.map((item) => `${item.market === 'US' ? '美股' : item.market === 'HK' ? '港股' : item.market === 'CN' ? '大A' : item.market}约 ${item.weight.toFixed(1)}%`).join('，');
   const largest = profile.largestHolding;
   return `当前市场分布为：${allocation || '暂无可计算仓位'}。这不是简单看美股或港股谁多，而是看风险来源是否集中。${largest ? `最大单标的是 ${largest.symbol}，约占 ${largest.weight.toFixed(1)}%。` : ''} 若单一市场加单一标的同时偏高，回撤时会更难判断是市场问题、标的问题，还是杠杆产品的问题。第一版建议先把仓位结构稳定下来，再追踪收益表现。`;
 }
