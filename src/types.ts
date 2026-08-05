@@ -8,7 +8,10 @@ export type QuoteViewSession = 'pre' | 'regular' | 'post';
 /** Session tag shown on a price (matches the active view when data is session-specific). */
 export type QuoteSession = QuoteViewSession;
 export type Tab = 'overview' | 'holdings' | 'returns' | 'trends' | 'ask' | 'import';
-export type Broker = '盈立证券' | '致富证券' | '星财富' | 'Schwab' | 'US Bancorp Advisors';
+/** Preset broker names; free-text custom brokers are also allowed. */
+export type Broker = string;
+
+export const presetBrokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'] as const;
 
 export type AiProvider = 'openai' | 'anthropic';
 

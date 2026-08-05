@@ -23,6 +23,15 @@ const supportedBrokers = ['盈立证券', '致富证券', '星财富', 'Schwab',
 const supportedBrokerText = supportedBrokers.join('、');
 const supportedBrokerJsonText = supportedBrokers.join('|');
 
+function sanitizeBroker(value, fallback = '盈立证券') {
+  const text = String(value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!text) return fallback;
+  // Prefer known presets when matched; otherwise accept free-text custom brokers.
+  if (supportedBrokers.includes(text)) return text;
+  return text;
+}
+
+
 function normalizeAiConfig(payload) {
   const raw = payload?.aiConfig && typeof payload.aiConfig === 'object' ? payload.aiConfig : null;
   if (!raw) return null;
@@ -258,7 +267,7 @@ function normalizeSharedHolding(item) {
   const cost = Number(item?.cost);
   if (!symbol || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price <= 0 || !Number.isFinite(cost) || cost <= 0) return null;
   return {
-    broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    broker: sanitizeBroker(item?.broker, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
     market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     type: sanitizeEnum(item?.type, ['个股', 'ETF', '杠杆ETF'], '个股'),
@@ -306,7 +315,7 @@ function normalizeSellRecord(item) {
     id: String(item?.id || `${symbol}-${createdAt}`).slice(0, 100),
     type: 'sell',
     status: item?.status === 'reversed' ? 'reversed' : 'active',
-    broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    broker: sanitizeBroker(item?.broker, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
     market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     holdingType: sanitizeEnum(item?.holdingType, ['个股', 'ETF', '杠杆ETF'], '个股'),
@@ -353,7 +362,7 @@ function normalizeBuyRecord(item) {
     id: String(item?.id || `${symbol}-${createdAt}`).slice(0, 100),
     type: 'buy',
     status: item?.status === 'reversed' ? 'reversed' : 'active',
-    broker: sanitizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    broker: sanitizeBroker(item?.broker, '盈立证券'),
     account: String(item?.account || '未命名账户').trim().slice(0, 80),
     market: sanitizeEnum(item?.market, ['US', 'HK', 'CN'], symbol.endsWith('.HK') ? 'HK' : (/\.(SH|SS|SZ)$/.test(symbol) ? 'CN' : 'US')),
     holdingType: sanitizeEnum(item?.holdingType, ['个股', 'ETF', '杠杆ETF'], '个股'),
@@ -1393,7 +1402,7 @@ function normalizeHolding(item) {
 
 function normalizeOcrDraft(result) {
   const holdings = Array.isArray(result?.holdings) ? result.holdings.slice(0, 50).map((item) => ({
-    broker: normalizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    broker: sanitizeBroker(item?.broker, '盈立证券'),
     account: String(item?.account || '').slice(0, 40),
     market: normalizeEnum(item?.market, ['US', 'HK', 'CN'], 'HK'),
     type: normalizeEnum(item?.type, ['个股', 'ETF', '杠杆ETF'], 'ETF'),
@@ -1408,7 +1417,7 @@ function normalizeOcrDraft(result) {
   })).filter((item) => item.symbol || item.name) : [];
 
   const accountSnapshots = Array.isArray(result?.accountSnapshots) ? result.accountSnapshots.slice(0, 20).map((item) => ({
-    broker: normalizeEnum(item?.broker, supportedBrokers, '盈立证券'),
+    broker: sanitizeBroker(item?.broker, '盈立证券'),
     account: String(item?.account || '').slice(0, 40),
     market: normalizeEnum(item?.market, ['US', 'HK', 'CN'], 'HK'),
     currency: normalizeEnum(item?.currency, ['USD', 'HKD', 'CNY'], 'HKD'),
@@ -1806,7 +1815,7 @@ async function callOpenAIOcr(images, aiConfig) {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), ocrTimeoutMs);
-  const prompt = `请从这些券商截图中识别个人持仓快照。只输出 JSON，不要 Markdown。\n\n支持券商：${supportedBrokerText}。\n\n识别要求：\n- 合并多张截图的信息，去重明显重复的持仓。\n- 只基于截图内容，不要猜测截图中没有的字段。\n- 数字必须保留小数，注意数量、现价、成本价、账户净值不要串列。\n- 港股代码输出为 00936.HK；A股输出 601208.SH、000001.SZ；美股输出 AAPL.US、QQQ.US 这种格式。\n- broker 只能是 ${supportedBrokerText}。\n- market 只能是 US、HK 或 CN（大A）；currency 只能是 USD、HKD 或 CNY。\n- type 只能是 个股、ETF、杠杆ETF。\n- 对不确定字段写入该行 warnings。\n\n输出格式：\n{\n  "summary":"一句话说明识别结果",\n  "holdings":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","type":"个股|ETF|杠杆ETF","name":"名称","symbol":"代码","currency":"USD|HKD|CNY","qty":0,"price":0,"cost":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "accountSnapshots":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","currency":"USD|HKD|CNY","netAsset":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "warnings":["整体注意事项"]\n}`;
+  const prompt = `请从这些券商截图中识别个人持仓快照。只输出 JSON，不要 Markdown。\n\n支持券商：${supportedBrokerText}。\n\n识别要求：\n- 合并多张截图的信息，去重明显重复的持仓。\n- 只基于截图内容，不要猜测截图中没有的字段。\n- 数字必须保留小数，注意数量、现价、成本价、账户净值不要串列。\n- 港股代码输出为 00936.HK；A股输出 601208.SH、000001.SZ；美股输出 AAPL.US、QQQ.US 这种格式。\n- broker 优先使用已知券商（${supportedBrokerText}）；截图中出现的其它券商名称可原样填写。\n- market 只能是 US、HK 或 CN（大A）；currency 只能是 USD、HKD 或 CNY。\n- type 只能是 个股、ETF、杠杆ETF。\n- 对不确定字段写入该行 warnings。\n\n输出格式：\n{\n  "summary":"一句话说明识别结果",\n  "holdings":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","type":"个股|ETF|杠杆ETF","name":"名称","symbol":"代码","currency":"USD|HKD|CNY","qty":0,"price":0,"cost":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "accountSnapshots":[{"broker":"${supportedBrokerJsonText}","account":"账户名","market":"US|HK|CN","currency":"USD|HKD|CNY","netAsset":0,"sourceImage":"文件名","warnings":["可疑字段"]}],\n  "warnings":["整体注意事项"]\n}`;
 
   try {
     const content = [

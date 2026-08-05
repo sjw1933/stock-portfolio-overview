@@ -4,12 +4,13 @@ import { AlertTriangle, Check, FileSearch, History, Plus, RotateCcw, Search, Tra
 import { PanelTitle } from '../components/PanelTitle';
 import type { AppContext } from '../appContext';
 import type { AccountSnapshot, Broker, Holding, SnapshotDraft } from '../types';
+import { presetBrokers } from '../types';
 import { recognizeSnapshot } from '../utils/ocrSnapshot';
 import { currencyForMarket, marketLabel } from '../utils/currency';
 import { fetchSecurityQuote, normalizeSecuritySymbol } from '../utils/quotes';
 import { holdingKey } from '../utils/sellTransactions';
 
-const brokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'] as const;
+const customBrokerValue = '__custom__';
 const markets = ['US', 'HK', 'CN'] as const;
 const holdingTypes = ['个股', 'ETF', '杠杆ETF'] as const;
 const currencies = ['USD', 'HKD', 'CNY'] as const;
@@ -48,6 +49,17 @@ export function ImportPage({ context }: { context: AppContext }) {
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
   const [resetPending, setResetPending] = useState(false);
   const [resetError, setResetError] = useState('');
+
+  const knownBrokers = useMemo(() => {
+    const fromData = [
+      ...context.holdings.map((item) => item.broker),
+      ...context.accountSnapshots.map((item) => item.broker),
+      ...(draft?.holdings.map((item) => item.broker) ?? []),
+      ...(draft?.accountSnapshots.map((item) => item.broker) ?? []),
+      ...manualAccounts.map((item) => item.broker),
+    ].map((item) => String(item || '').trim()).filter(Boolean);
+    return Array.from(new Set([...presetBrokers, ...fromData]));
+  }, [context.accountSnapshots, context.holdings, draft, manualAccounts]);
 
   const validation = useMemo(() => validateDraft(draft), [draft]);
   const manualValidation = useMemo(() => validateManualAccounts(manualAccounts), [manualAccounts]);
@@ -208,7 +220,12 @@ export function ImportPage({ context }: { context: AppContext }) {
                   {manualAccounts.length > 1 && <button type="button" className="icon-button danger-icon" onClick={() => setManualAccounts((rows) => rows.filter((item) => item.id !== group.id))} aria-label="删除账户"><Trash2 size={17} /></button>}
                 </div>
                 <div className="draft-fields manual-account-fields">
-                  <SelectField label="券商" value={group.broker} options={brokers} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { broker: value as Broker })} />
+                  <BrokerField
+                    label="券商"
+                    value={group.broker}
+                    knownBrokers={knownBrokers}
+                    onChange={(value) => patchManualAccount(setManualAccounts, group.id, { broker: value as Broker })}
+                  />
                   <TextField label="账户名称" value={group.account} onChange={(value) => patchManualAccount(setManualAccounts, group.id, { account: value })} />
                   <label>
                     市场
@@ -264,8 +281,8 @@ export function ImportPage({ context }: { context: AppContext }) {
           </div>
           {draft.warnings.length > 0 && <p className="warn-text">{draft.warnings.join('；')}</p>}
           {draft.source === 'manual' && <ChangePreview draft={draft} context={context} />}
-          <DraftHoldings draft={draft} setDraft={setDraft} />
-          <DraftAccounts draft={draft} setDraft={setDraft} />
+          <DraftHoldings draft={draft} setDraft={setDraft} knownBrokers={knownBrokers} />
+          <DraftAccounts draft={draft} setDraft={setDraft} knownBrokers={knownBrokers} />
           {validation.length > 0 && <div className="change-summary"><b>保存前需修正</b>{validation.map((item) => <p key={item}>{item}</p>)}</div>}
           {error && <p className="warn-text">{error}</p>}
           <button className="primary-action" disabled={validation.length > 0 || status === 'loading'} onClick={() => void saveDraft()}><Check size={18} />{status === 'loading' ? '正在保存' : '确认增量更新'}</button>
@@ -372,11 +389,11 @@ function ImportAuditPanel({ context }: { context: AppContext }) {
   );
 }
 
-function DraftHoldings({ draft, setDraft }: DraftProps) {
+function DraftHoldings({ draft, setDraft, knownBrokers }: DraftProps & { knownBrokers: string[] }) {
   return (
     <div className="draft-table"><div className="draft-section-title">持仓明细</div>{draft.holdings.map((row, index) => (
       <article className="draft-row" key={`${row.symbol}-${index}`}><div className="draft-row-head"><b>{row.name || row.symbol || `持仓 ${index + 1}`}</b><button onClick={() => setDraft(removeHolding(draft, index))} aria-label="删除持仓"><Trash2 size={16} /></button></div><div className="draft-fields">
-        <SelectField label="券商" value={row.broker} options={brokers} onChange={(value) => setDraft(updateHolding(draft, index, { broker: value as Holding['broker'] }))} />
+        <BrokerField label="券商" value={row.broker} knownBrokers={knownBrokers} onChange={(value) => setDraft(updateHolding(draft, index, { broker: value as Holding['broker'] }))} />
         <TextField label="账户" value={row.account} onChange={(value) => setDraft(updateHolding(draft, index, { account: value }))} />
         <label>
           市场
@@ -396,12 +413,12 @@ function DraftHoldings({ draft, setDraft }: DraftProps) {
   );
 }
 
-function DraftAccounts({ draft, setDraft }: DraftProps) {
+function DraftAccounts({ draft, setDraft, knownBrokers }: DraftProps & { knownBrokers: string[] }) {
   if (!draft.accountSnapshots.length) return null;
   return (
     <div className="draft-table"><div className="draft-section-title">账户净值</div>{draft.accountSnapshots.map((row, index) => (
       <article className="draft-row" key={`${row.account}-${index}`}><div className="draft-row-head"><b>{row.account || `账户 ${index + 1}`}</b><button onClick={() => setDraft(removeAccount(draft, index))} aria-label="删除账户"><Trash2 size={16} /></button></div><div className="draft-fields">
-        <SelectField label="券商" value={row.broker} options={brokers} onChange={(value) => setDraft(updateAccount(draft, index, { broker: value }))} />
+        <BrokerField label="券商" value={row.broker} knownBrokers={knownBrokers} onChange={(value) => setDraft(updateAccount(draft, index, { broker: value }))} />
         <TextField label="账户" value={row.account} onChange={(value) => setDraft(updateAccount(draft, index, { account: value }))} />
         <label>
           市场
@@ -430,6 +447,57 @@ function OptionalNumberField({ label, value, step, onChange }: { label: string; 
 
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
   return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+}
+
+function BrokerField({
+  label,
+  value,
+  knownBrokers,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  knownBrokers: string[];
+  onChange: (value: string) => void;
+}) {
+  const trimmed = String(value || '').trim();
+  const isCustom = trimmed !== '' && !knownBrokers.includes(trimmed);
+  const resolvedSelect = isCustom
+    ? customBrokerValue
+    : (knownBrokers.includes(trimmed) ? trimmed : (knownBrokers[0] || customBrokerValue));
+
+  return (
+    <>
+      <label>
+        {label}
+        <select
+          value={resolvedSelect}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next === customBrokerValue) {
+              onChange(isCustom ? trimmed : '');
+              return;
+            }
+            onChange(next);
+          }}
+        >
+          {knownBrokers.map((item) => <option key={item} value={item}>{item}</option>)}
+          <option value={customBrokerValue}>新增券商名称…</option>
+        </select>
+      </label>
+      {resolvedSelect === customBrokerValue && (
+        <label>
+          券商名称
+          <input
+            value={value}
+            maxLength={40}
+            placeholder="例如 华泰证券 / Fidelity"
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </label>
+      )}
+    </>
+  );
 }
 
 function createManualAccount(context: AppContext): ManualAccount {

@@ -2,23 +2,34 @@ import { ArrowLeft, Check, Search, TrendingUp, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { AppContext } from '../appContext';
 import type { Broker, BuyInput, Holding } from '../types';
+import { presetBrokers } from '../types';
 import { currencyForMarket, marketLabel } from '../utils/currency';
 import { fetchSecurityQuote, normalizeSecuritySymbol } from '../utils/quotes';
 
-const brokers = ['盈立证券', '致富证券', '星财富', 'Schwab', 'US Bancorp Advisors'] as const;
 const holdingTypes = ['个股', 'ETF', '杠杆ETF'] as const;
 const markets: Holding['market'][] = ['US', 'HK', 'CN'];
+const customBrokerValue = '__custom__';
 
 type AccountOption = Pick<Holding, 'broker' | 'account' | 'market' | 'currency'>;
 
 export function BuyTradeSheet({ context, holding, onClose }: { context: AppContext; holding?: Holding; onClose: () => void }) {
   const accountOptions = useMemo(() => buildAccountOptions(context), [context.accountSnapshots, context.holdings]);
+  const knownBrokers = useMemo(() => {
+    const fromData = [...context.holdings, ...context.accountSnapshots]
+      .map((item) => String(item.broker || '').trim())
+      .filter(Boolean);
+    return Array.from(new Set([...presetBrokers, ...fromData]));
+  }, [context.accountSnapshots, context.holdings]);
   const initialAccount = holding ? accountFromHolding(holding) : accountOptions[0];
   const [step, setStep] = useState<'form' | 'confirm'>('form');
   const [accountChoice, setAccountChoice] = useState(holding ? accountKey(holding) : initialAccount ? accountKey(initialAccount) : '__new__');
-  const [newBroker, setNewBroker] = useState<Broker>('盈立证券');
+  const [brokerChoice, setBrokerChoice] = useState<string>('盈立证券');
+  const [customBroker, setCustomBroker] = useState('');
   const [newAccount, setNewAccount] = useState('');
   const [newMarket, setNewMarket] = useState<Holding['market']>('US');
+  const newBroker: Broker = brokerChoice === customBrokerValue
+    ? customBroker.trim()
+    : brokerChoice;
   const [name, setName] = useState(holding?.name ?? '');
   const [symbol, setSymbol] = useState(holding?.symbol ?? '');
   const [holdingType, setHoldingType] = useState<Holding['type']>(holding?.type ?? '个股');
@@ -50,6 +61,7 @@ export function BuyTradeSheet({ context, holding, onClose }: { context: AppConte
 
   const validation = useMemo(() => {
     const errors: string[] = [];
+    if (accountChoice === '__new__' && !newBroker.trim()) errors.push('请选择或填写券商名称');
     if (!selectedAccount?.account.trim()) errors.push('请选择或填写券商账户');
     if (!symbol.trim()) errors.push('股票代码不能为空');
     if (!name.trim()) errors.push('股票名称不能为空');
@@ -59,7 +71,7 @@ export function BuyTradeSheet({ context, holding, onClose }: { context: AppConte
     if (!tradedAt || Number.isNaN(new Date(tradedAt).getTime())) errors.push('成交日期时间无效');
     if (new Date(tradedAt).getTime() > Date.now() + 5 * 60 * 1000) errors.push('成交时间不能晚于当前时间');
     return errors;
-  }, [fees, name, price, qty, selectedAccount?.account, symbol, tradedAt]);
+  }, [accountChoice, fees, name, newBroker, price, qty, selectedAccount?.account, symbol, tradedAt]);
 
   async function lookupQuote() {
     if (!symbol.trim() || !selectedAccount) return;
@@ -134,10 +146,29 @@ export function BuyTradeSheet({ context, holding, onClose }: { context: AppConte
                   <div className="sell-form-grid new-account-fields">
                     <label>
                       券商
-                      <select value={newBroker} onChange={(event) => setNewBroker(event.target.value as Broker)}>
-                        {brokers.map((item) => <option key={item}>{item}</option>)}
+                      <select
+                        value={brokerChoice}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setBrokerChoice(value);
+                          if (value !== customBrokerValue) setCustomBroker('');
+                        }}
+                      >
+                        {knownBrokers.map((item) => <option key={item} value={item}>{item}</option>)}
+                        <option value={customBrokerValue}>新增券商名称…</option>
                       </select>
                     </label>
+                    {brokerChoice === customBrokerValue && (
+                      <label>
+                        券商名称
+                        <input
+                          value={customBroker}
+                          maxLength={40}
+                          placeholder="例如 华泰证券 / Fidelity"
+                          onChange={(event) => setCustomBroker(event.target.value)}
+                        />
+                      </label>
+                    )}
                     <label>
                       账户名称
                       <input value={newAccount} onChange={(event) => setNewAccount(event.target.value)} />
