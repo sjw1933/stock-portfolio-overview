@@ -9,6 +9,7 @@ import {
 } from '../utils/newsSources';
 
 const newsExpandedKey = 'gup-holding-news-expanded-v1';
+const newsSourcesExpandedKey = 'gup-holding-news-sources-expanded-v1';
 
 const statusLabel: Record<HoldingNewsStatus, string> = {
   idle: '待加载',
@@ -25,6 +26,15 @@ function readNewsExpanded() {
     return raw !== 'false';
   } catch {
     return true;
+  }
+}
+
+function readNewsSourcesExpanded() {
+  try {
+    // Default collapsed so the source chips don't occupy permanent space.
+    return localStorage.getItem(newsSourcesExpandedKey) === 'true';
+  } catch {
+    return false;
   }
 }
 
@@ -54,13 +64,15 @@ export function HoldingNewsBoard({
   onNewsSourcesChange: (sources: NewsSourceId[]) => void;
 }) {
   const [expanded, setExpanded] = useState(readNewsExpanded);
+  const [sourcesExpanded, setSourcesExpanded] = useState(readNewsSourcesExpanded);
   const [activeSymbol, setActiveSymbol] = useState('ALL');
   const symbolCounts = useMemo(() => buildSymbolCounts(items, holdings), [items, holdings]);
   const filteredItems = activeSymbol === 'ALL' ? items : items.filter((item) => matchesNewsSymbol(item, activeSymbol));
   const visibleItems = filteredItems.slice(0, compact ? 5 : 8);
+  const sourcesText = newsSourcesLabel(newsSources);
   const statusText = fetchedAt
-    ? `最后更新 ${formatFetchedAt(fetchedAt)} · ${newsSourcesLabel(newsSources)}`
-    : `${statusLabel[status]} · ${newsSourcesLabel(newsSources)}`;
+    ? `最后更新 ${formatFetchedAt(fetchedAt)} · ${sourcesText}`
+    : `${statusLabel[status]} · ${sourcesText}`;
 
   useEffect(() => {
     if (activeSymbol !== 'ALL' && !symbolCounts.some((item) => item.symbol === activeSymbol)) setActiveSymbol('ALL');
@@ -71,6 +83,18 @@ export function HoldingNewsBoard({
       const next = !current;
       try {
         localStorage.setItem(newsExpandedKey, String(next));
+      } catch {
+        // Ignore private-mode storage failures.
+      }
+      return next;
+    });
+  }
+
+  function toggleSourcesExpanded() {
+    setSourcesExpanded((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem(newsSourcesExpandedKey, String(next));
       } catch {
         // Ignore private-mode storage failures.
       }
@@ -119,29 +143,50 @@ export function HoldingNewsBoard({
               AI分析：{aiEnabled ? '开' : '关'}
             </button>
           </div>
-          <div className="news-source-pills" aria-label="新闻源">
-            <span className="news-source-label">新闻源</span>
-            {newsSourceOptions.map((option) => {
-              const active = newsSources.includes(option.id);
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={active ? 'active' : ''}
-                  title={option.hint}
-                  aria-pressed={active}
-                  onClick={() => {
-                    const next = toggleNewsSource(newsSources, option.id);
-                    if (next === newsSources) return;
-                    onNewsSourcesChange(next);
-                  }}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+          <div className={`news-source-panel ${sourcesExpanded ? 'is-open' : 'is-closed'}`}>
+            <button
+              type="button"
+              className="news-source-toggle"
+              aria-expanded={sourcesExpanded}
+              aria-controls="holding-news-sources"
+              onClick={toggleSourcesExpanded}
+            >
+              <span>
+                <b>新闻源设置</b>
+                <em>{sourcesText}</em>
+              </span>
+              <span className="news-source-toggle-meta">
+                <span>{sourcesExpanded ? '收起' : '展开'}</span>
+                <ChevronDown size={16} className={`news-source-toggle-chevron ${sourcesExpanded ? 'open' : ''}`} aria-hidden="true" />
+              </span>
+            </button>
+            {sourcesExpanded && (
+              <div id="holding-news-sources" className="news-source-body">
+                <div className="news-source-pills" aria-label="新闻源">
+                  {newsSourceOptions.map((option) => {
+                    const active = newsSources.includes(option.id);
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={active ? 'active' : ''}
+                        title={option.hint}
+                        aria-pressed={active}
+                        onClick={() => {
+                          const next = toggleNewsSource(newsSources, option.id);
+                          if (next === newsSources) return;
+                          onNewsSourcesChange(next);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="news-source-hint">国内网络建议勾选「腾讯财经」；Yahoo / Google 需可访问外网。切换源后会自动重新抓取。</p>
+              </div>
+            )}
           </div>
-          <p className="news-source-hint">国内网络建议勾选「腾讯财经」；Yahoo / Google 需可访问外网。切换源后会自动重新抓取。</p>
           <div className="news-filter-pills" aria-label="按持仓筛选新闻">
             <button type="button" className={activeSymbol === 'ALL' ? 'active' : ''} onClick={() => setActiveSymbol('ALL')}>全部 {items.length}</button>
             {symbolCounts.map((item) => (
