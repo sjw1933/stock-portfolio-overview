@@ -208,10 +208,11 @@ export type HoldingNewsItem = {
 export type HoldingNewsStatus = 'idle' | 'loading' | 'live' | 'fallback' | 'error';
 
 export type HoldingNewsResult = {
-  source: 'ticker' | 'investing' | 'mixed' | 'fallback';
+  source: 'ticker' | 'investing' | 'tencent' | 'mixed' | 'fallback';
   fetchedAt: string;
   summary: string;
   items: HoldingNewsItem[];
+  sources?: string[];
 };
 
 export type AskAnalysisResult = {

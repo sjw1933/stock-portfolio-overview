@@ -793,11 +793,29 @@ function yahooNewsTicker(symbol) {
     if (!digits) return '';
     return `${digits.padStart(4, '0')}.HK`;
   }
-  return normalized.replace(/\.(US|HK)$/, '');
+  if (/\.(SH|SS|SZ)$/.test(normalized)) return normalized.replace(/\.(SH|SS|SZ)$/, '');
+  return normalized.replace(/\.(US|HK|SH|SS|SZ)$/, '');
+}
+
+/** Map local symbol to Tencent finance code: usAAPL / hk00700 / sh601208 / sz000001 */
+function tencentNewsSymbol(symbol) {
+  const normalized = String(symbol || '').trim().toUpperCase();
+  if (!normalized) return '';
+  if (normalized.endsWith('.US')) return `us${normalized.replace(/\.US$/, '')}`;
+  if (normalized.endsWith('.HK')) {
+    const digits = normalized.replace(/\.HK$/, '').replace(/\D/g, '');
+    if (!digits) return '';
+    return `hk${digits.padStart(5, '0')}`;
+  }
+  if (normalized.endsWith('.SH') || normalized.endsWith('.SS')) {
+    return `sh${normalized.replace(/\.(SH|SS)$/, '')}`;
+  }
+  if (normalized.endsWith('.SZ')) return `sz${normalized.replace(/\.SZ$/, '')}`;
+  return '';
 }
 
 function googleNewsQuery(holding) {
-  const base = String(holding.symbol || '').replace(/\.(US|HK)$/i, '');
+  const base = String(holding.symbol || '').replace(/\.(US|HK|SH|SS|SZ)$/i, '');
   const name = cleanHoldingName(holding.name);
   const parts = [base];
   if (name && name.toLowerCase() !== base.toLowerCase()) parts.push(`"${name}"`);
@@ -805,10 +823,10 @@ function googleNewsQuery(holding) {
   return `${parts.join(' OR ')} when:14d`;
 }
 
-function tickerNewsUrls(holding) {
+function tickerNewsUrls(holding, enabledSources = { yahoo: true, google: true }) {
   const yahooTicker = yahooNewsTicker(holding.symbol);
   const urls = [];
-  if (yahooTicker) {
+  if (enabledSources.yahoo && yahooTicker) {
     urls.push({
       feed: 'yahoo-ticker',
       source: 'Yahoo Finance',
@@ -816,14 +834,97 @@ function tickerNewsUrls(holding) {
     });
   }
   const query = googleNewsQuery(holding);
-  if (query) {
+  if (enabledSources.google && query) {
+    const isCn = holding.market === 'CN' || /\.(SH|SS|SZ)$/i.test(holding.symbol || '');
+    const locale = isCn
+      ? { hl: 'zh-CN', gl: 'CN', ceid: 'CN:zh-Hans' }
+      : { hl: 'en-US', gl: 'US', ceid: 'US:en' };
     urls.push({
       feed: 'google-ticker',
       source: 'Google News',
-      url: `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+      url: `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=${locale.hl}&gl=${locale.gl}&ceid=${encodeURIComponent(locale.ceid)}`,
     });
   }
   return urls;
+}
+
+function normalizeNewsSources(raw) {
+  const allowed = new Set(['tencent', 'investing', 'yahoo', 'google']);
+  const list = Array.isArray(raw) ? raw.map((item) => String(item || '').toLowerCase().trim()) : [];
+  const selected = list.filter((item) => allowed.has(item));
+  // Default: Tencent + Investing (friendlier for CN networks).
+  return selected.length ? Array.from(new Set(selected)) : ['tencent', 'investing'];
+}
+
+async function fetchTencentNewsForHolding(holding, signal) {
+  const code = tencentNewsSymbol(holding.symbol);
+  if (!code) return [];
+  const rows = [];
+  // type=2 news articles (have urls), type=1 research notes (have urls)
+  for (const type of [2, 1]) {
+    try {
+      const url = `https://proxy.finance.qq.com/ifzqgtimg/appstock/news/info/search?symbol=${encodeURIComponent(code)}&page=1&n=6&type=${type}`;
+      const response = await fetch(url, {
+        signal,
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
+          referer: 'https://gu.qq.com/',
+        },
+      });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const list = Array.isArray(payload?.data?.data) ? payload.data.data : [];
+      for (const row of list) {
+        const title = String(row?.title || row?.chineseTitle || '').replace(/\s+/g, ' ').trim();
+        const link = String(row?.url || row?.app_detail_link || '').trim();
+        if (!title || !link || !/^https?:\/\//i.test(link)) continue;
+        rows.push({
+          title,
+          url: link,
+          source: String(row?.src || '腾讯财经').slice(0, 40) || '腾讯财经',
+          description: String(row?.summary || row?.typeStr || '').slice(0, 400),
+          publishedAt: normalizeNewsDate(row?.time || row?.create_time || row?.update_time),
+          feed: 'tencent-ticker',
+          boundHolding: holding,
+        });
+      }
+    } catch {
+      // Ignore single-type failures; other types / holdings may still work.
+    }
+  }
+  return rows;
+}
+
+async function fetchTencentBoundNews(holdings, signal) {
+  const targets = holdings.slice(0, 12);
+  const bound = [];
+  for (let index = 0; index < targets.length; index += 3) {
+    if (signal?.aborted) break;
+    const chunk = targets.slice(index, index + 3);
+    const results = await Promise.allSettled(chunk.map((holding) => fetchTencentNewsForHolding(holding, signal)));
+    for (const result of results) {
+      if (result.status === 'fulfilled') bound.push(...result.value);
+    }
+  }
+  return bound;
+}
+
+function attachTencentFeedItem(item) {
+  const holding = item.boundHolding;
+  if (!holding?.symbol) return null;
+  const base = yahooNewsTicker(holding.symbol) || holding.symbol.replace(/\.(US|HK|SH|SS|SZ)$/i, '');
+  return {
+    title: item.title,
+    url: item.url,
+    source: item.source || '腾讯财经',
+    publishedAt: item.publishedAt,
+    description: item.description || '',
+    symbol: holding.symbol,
+    matchedBy: [base, 'tencent-ticker', holding.symbol],
+    score: 16,
+    feed: 'tencent-ticker',
+  };
 }
 
 function normalizeNewsDate(value) {
@@ -841,7 +942,7 @@ function cleanHoldingName(name) {
 
 function keywordsForHolding(holding) {
   const symbol = String(holding.symbol || '').toUpperCase();
-  const baseSymbol = symbol.replace(/\.(US|HK)$/i, '');
+  const baseSymbol = symbol.replace(/\.(US|HK|SH|SS|SZ)$/i, '');
   const cleanedName = cleanHoldingName(holding.name);
   const mapped = Array.isArray(symbolKeywordMap[symbol]) ? symbolKeywordMap[symbol] : [];
 
@@ -914,10 +1015,10 @@ function normalizeNewsHolding(item) {
   };
 }
 
-async function fetchTickerBoundNews(holdings, signal) {
+async function fetchTickerBoundNews(holdings, signal, enabledSources = { yahoo: true, google: true }) {
   // Cap fan-out: each holding may hit Yahoo + Google.
   const targets = holdings.slice(0, 12);
-  const jobs = targets.flatMap((holding) => tickerNewsUrls(holding).map((feed) => ({ holding, ...feed })));
+  const jobs = targets.flatMap((holding) => tickerNewsUrls(holding, enabledSources).map((feed) => ({ holding, ...feed })));
   const bound = [];
 
   for (let index = 0; index < jobs.length; index += 4) {
@@ -943,7 +1044,7 @@ function attachTickerFeedItem(item) {
   if (!holding?.symbol) return null;
 
   const scored = scoreNewsItem(item, holding);
-  const base = yahooNewsTicker(holding.symbol) || holding.symbol.replace(/\.(US|HK)$/i, '');
+  const base = yahooNewsTicker(holding.symbol) || holding.symbol.replace(/\.(US|HK|SH|SS|SZ)$/i, '');
   const haystack = `${item.title || ''} ${item.description || ''} ${item.url || ''}`.toLowerCase();
   const tickerHit = haystackMatchesKeyword(haystack, base)
     || haystackMatchesKeyword(haystack, holding.symbol)
@@ -996,6 +1097,11 @@ function matchGeneralFeedItem(item, holdings) {
 async function fetchHoldingNews(payload) {
   const holdings = Array.isArray(payload?.holdings) ? payload.holdings.slice(0, 20).map(normalizeNewsHolding).filter((item) => item.symbol) : [];
   if (!holdings.length) throw new Error('holdings is empty');
+  const sources = normalizeNewsSources(payload?.sources);
+  const useInvesting = sources.includes('investing');
+  const useYahoo = sources.includes('yahoo');
+  const useGoogle = sources.includes('google');
+  const useTencent = sources.includes('tencent');
 
   // De-dupe multi-account same symbol so scoring is per ticker.
   const uniqueHoldings = Array.from(new Map(holdings.map((item) => [item.symbol, item])).values());
@@ -1003,15 +1109,20 @@ async function fetchHoldingNews(payload) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 26000);
   try {
-    const [investingBound, tickerBound, generalResults] = await Promise.all([
-      fetchInvestingBoundNews(uniqueHoldings, controller.signal).catch(() => []),
-      fetchTickerBoundNews(uniqueHoldings, controller.signal).catch(() => []),
-      Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal, investingRequestHeaders({
-        accept: 'application/rss+xml, application/xml, text/xml, */*',
-      })))),
+    const [investingBound, tickerBound, tencentBound, generalResults] = await Promise.all([
+      useInvesting ? fetchInvestingBoundNews(uniqueHoldings, controller.signal).catch(() => []) : Promise.resolve([]),
+      (useYahoo || useGoogle)
+        ? fetchTickerBoundNews(uniqueHoldings, controller.signal, { yahoo: useYahoo, google: useGoogle }).catch(() => [])
+        : Promise.resolve([]),
+      useTencent ? fetchTencentBoundNews(uniqueHoldings, controller.signal).catch(() => []) : Promise.resolve([]),
+      useInvesting
+        ? Promise.allSettled(investingNewsFeeds.map((url) => fetchText(url, controller.signal, investingRequestHeaders({
+          accept: 'application/rss+xml, application/xml, text/xml, */*',
+        }))))
+        : Promise.resolve([]),
     ]);
 
-    const generalItems = generalResults.flatMap((result) => (
+    const generalItems = (Array.isArray(generalResults) ? generalResults : []).flatMap((result) => (
       result.status === 'fulfilled'
         ? parseRssItems(result.value, { source: 'Investing.com', feed: 'investing' })
         : []
@@ -1020,7 +1131,15 @@ async function fetchHoldingNews(payload) {
     const matched = [];
     const seenUrls = new Set();
 
-    // 1) Investing.com instrument news (Pro/session cookie unlocks pair pages).
+    // 1) Tencent finance (CN-friendly).
+    for (const item of tencentBound) {
+      const attached = attachTencentFeedItem(item);
+      if (!attached || seenUrls.has(attached.url)) continue;
+      seenUrls.add(attached.url);
+      matched.push(attached);
+    }
+
+    // 2) Investing.com instrument news (Pro/session cookie unlocks pair pages).
     for (const item of investingBound) {
       const attached = attachInvestingPairItem(item);
       if (!attached || seenUrls.has(attached.url)) continue;
@@ -1028,7 +1147,7 @@ async function fetchHoldingNews(payload) {
       matched.push(attached);
     }
 
-    // 2) Ticker-bound Yahoo / Google feeds.
+    // 3) Ticker-bound Yahoo / Google feeds.
     for (const item of tickerBound) {
       const attached = attachTickerFeedItem(item);
       if (!attached || seenUrls.has(attached.url)) continue;
@@ -1036,7 +1155,7 @@ async function fetchHoldingNews(payload) {
       matched.push(attached);
     }
 
-    // 3) Investing EN/CN RSS with strict keyword match.
+    // 4) Investing EN/CN RSS with strict keyword match.
     for (const item of generalItems) {
       if (seenUrls.has(item.url)) continue;
       const attached = matchGeneralFeedItem(item, uniqueHoldings);
@@ -1058,7 +1177,8 @@ async function fetchHoldingNews(payload) {
       feed: 'investing',
     }));
 
-    const ranked = (matched.length ? matched : fallbackItems)
+    // If only Tencent is selected and matched is empty, keep empty rather than inventing Investing fallback.
+    const ranked = (matched.length ? matched : (useInvesting ? fallbackItems : []))
       .sort((a, b) => b.score - a.score || new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
     // Fair mix: up to 3 stories per ticker first, then fill remaining slots by score.
     const selectedRaw = [];
@@ -1094,26 +1214,41 @@ async function fetchHoldingNews(payload) {
     const investingPairHits = selected.filter((item) => (item.matchedBy || []).includes('investing-pair')).length;
     const investingRssHits = selected.filter((item) => (item.matchedBy || []).includes('investing-rss') || String(item.source || '').includes('Investing')).length;
     const tickerHits = selected.filter((item) => (item.matchedBy || []).some((value) => value === 'yahoo-ticker' || value === 'google-ticker')).length;
+    const tencentHits = selected.filter((item) => (item.matchedBy || []).includes('tencent-ticker') || String(item.source || '').includes('腾讯')).length;
+    const activeCount = [investingPairHits + investingRssHits > 0, tickerHits > 0, tencentHits > 0].filter(Boolean).length;
     const source = !matched.length
       ? 'fallback'
-      : investingPairHits > 0
-        ? 'investing'
-        : tickerHits > 0 && investingRssHits > 0
-          ? 'mixed'
-          : tickerHits > 0
-            ? 'ticker'
-            : 'investing';
+      : activeCount > 1
+        ? 'mixed'
+        : tencentHits > 0
+          ? 'tencent'
+          : investingPairHits + investingRssHits > 0
+            ? 'investing'
+            : tickerHits > 0
+              ? 'ticker'
+              : 'mixed';
 
-    const cookieHint = investingSessionCookie
-      ? (investingPairHits ? `Investing 标的新闻 ${investingPairHits} 条` : '已配置 Investing Cookie，但标的页暂未取到文章')
-      : '未配置 INVESTING_SESSION_COOKIE，Investing 仅用公开 RSS';
+    const sourceLabels = sources.map((id) => (
+      id === 'tencent' ? '腾讯财经'
+        : id === 'investing' ? 'Investing'
+          : id === 'yahoo' ? 'Yahoo'
+            : id === 'google' ? 'Google'
+              : id
+    )).join(' + ');
+
+    const cookieHint = !useInvesting
+      ? '未启用 Investing'
+      : investingSessionCookie
+        ? (investingPairHits ? `Investing 标的新闻 ${investingPairHits} 条` : '已配置 Investing Cookie，但标的页暂未取到文章')
+        : '未配置 INVESTING_SESSION_COOKIE，Investing 仅用公开 RSS';
 
     return {
       source,
+      sources,
       fetchedAt: new Date().toISOString(),
       summary: matched.length
-        ? `新闻源：Investing.com + Yahoo/Google。${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，展示 ${selected.length} 条（${cookieHint}${tickerHits ? `，其它 ticker 源 ${tickerHits} 条` : ''}）。`
-        : `未命中具体持仓。${cookieHint}。当前展示 Investing 市场参考新闻。`,
+        ? `已选源：${sourceLabels}。${uniqueHoldings.length} 只标的中 ${matchedSymbols.size} 只命中，展示 ${selected.length} 条（腾讯 ${tencentHits} / Investing ${investingPairHits + investingRssHits} / Yahoo·Google ${tickerHits}；${cookieHint}）。`
+        : `已选源：${sourceLabels}。未命中具体持仓新闻。${cookieHint}。`,
       items: selected,
     };
   } finally {

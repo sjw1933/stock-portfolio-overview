@@ -1,13 +1,19 @@
 import { ChevronDown, ExternalLink, Newspaper, RefreshCw, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AggregatedHolding, HoldingNewsItem, HoldingNewsStatus } from '../types';
+import {
+  newsSourceOptions,
+  newsSourcesLabel,
+  toggleNewsSource,
+  type NewsSourceId,
+} from '../utils/newsSources';
 
 const newsExpandedKey = 'gup-holding-news-expanded-v1';
 
 const statusLabel: Record<HoldingNewsStatus, string> = {
   idle: '待加载',
   loading: '抓取中',
-  live: 'Investing / Ticker',
+  live: '多源新闻',
   fallback: '市场新闻',
   error: '抓取失败',
 };
@@ -32,6 +38,8 @@ export function HoldingNewsBoard({
   onRefresh,
   aiEnabled,
   onAiEnabledChange,
+  newsSources,
+  onNewsSourcesChange,
 }: {
   items: HoldingNewsItem[];
   compact?: boolean;
@@ -42,13 +50,17 @@ export function HoldingNewsBoard({
   onRefresh: () => void;
   aiEnabled: boolean;
   onAiEnabledChange: (enabled: boolean) => void;
+  newsSources: NewsSourceId[];
+  onNewsSourcesChange: (sources: NewsSourceId[]) => void;
 }) {
   const [expanded, setExpanded] = useState(readNewsExpanded);
   const [activeSymbol, setActiveSymbol] = useState('ALL');
   const symbolCounts = useMemo(() => buildSymbolCounts(items, holdings), [items, holdings]);
   const filteredItems = activeSymbol === 'ALL' ? items : items.filter((item) => matchesNewsSymbol(item, activeSymbol));
   const visibleItems = filteredItems.slice(0, compact ? 5 : 8);
-  const statusText = fetchedAt ? `最后更新 ${formatFetchedAt(fetchedAt)}` : statusLabel[status];
+  const statusText = fetchedAt
+    ? `最后更新 ${formatFetchedAt(fetchedAt)} · ${newsSourcesLabel(newsSources)}`
+    : `${statusLabel[status]} · ${newsSourcesLabel(newsSources)}`;
 
   useEffect(() => {
     if (activeSymbol !== 'ALL' && !symbolCounts.some((item) => item.symbol === activeSymbol)) setActiveSymbol('ALL');
@@ -107,6 +119,29 @@ export function HoldingNewsBoard({
               AI分析：{aiEnabled ? '开' : '关'}
             </button>
           </div>
+          <div className="news-source-pills" aria-label="新闻源">
+            <span className="news-source-label">新闻源</span>
+            {newsSourceOptions.map((option) => {
+              const active = newsSources.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={active ? 'active' : ''}
+                  title={option.hint}
+                  aria-pressed={active}
+                  onClick={() => {
+                    const next = toggleNewsSource(newsSources, option.id);
+                    if (next === newsSources) return;
+                    onNewsSourcesChange(next);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="news-source-hint">国内网络建议勾选「腾讯财经」；Yahoo / Google 需可访问外网。切换源后会自动重新抓取。</p>
           <div className="news-filter-pills" aria-label="按持仓筛选新闻">
             <button type="button" className={activeSymbol === 'ALL' ? 'active' : ''} onClick={() => setActiveSymbol('ALL')}>全部 {items.length}</button>
             {symbolCounts.map((item) => (

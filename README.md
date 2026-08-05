@@ -23,7 +23,7 @@
 - 券商截图 OCR 识别、逐行确认和账户级增量更新
 - 按账户分组手动录入当前持仓，支持变更预览和导入审计
 - K 线展示有效买入点和卖出点
-- 持仓新闻：Investing.com 英/中 RSS 为主，Yahoo/Google 按 ticker 补充；可选配置 `INVESTING_SESSION_COOKIE` 拉取标的页新闻（Pro 登录 Cookie）；面板可展开收起
+- 持仓新闻：设置里可多选 **腾讯财经 / Investing / Yahoo / Google**（默认腾讯 + Investing，方便国内访问）；可选 `INVESTING_SESSION_COOKIE`；面板可展开收起
 - 总览「今日持仓走势预判」：默认规则引擎，可选接入 OpenAI 兼容 / Anthropic 模型增强
 - AI 数据问询与风险分析
 - 多浏览器共享快照与版本冲突保护

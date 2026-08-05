@@ -1,12 +1,21 @@
 import type { Holding, HoldingNewsResult } from '../types';
+import type { NewsSourceId } from './newsSources';
+import { defaultNewsSources } from './newsSources';
 
-export async function fetchHoldingNews(holdings: Holding[], signal?: AbortSignal): Promise<HoldingNewsResult> {
+export async function fetchHoldingNews(
+  holdings: Holding[],
+  signal?: AbortSignal,
+  sources: NewsSourceId[] = defaultNewsSources,
+): Promise<HoldingNewsResult> {
   const response = await fetch('/api/holding-news', {
     method: 'POST',
     signal,
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ holdings }),
+    body: JSON.stringify({
+      holdings,
+      sources: sources.length ? sources : defaultNewsSources,
+    }),
   });
 
   const payload = await response.json() as { code?: number; message?: string; data?: HoldingNewsResult };

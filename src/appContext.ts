@@ -43,6 +43,8 @@ export type AppContext = {
   refreshNews: () => Promise<void>;
   newsAiEnabled: boolean;
   setNewsAiEnabled: (enabled: boolean) => void;
+  newsSources: import('./utils/newsSources').NewsSourceId[];
+  setNewsSources: (sources: import('./utils/newsSources').NewsSourceId[]) => void;
   aiConfig: AiApiConfig;
   setAiConfig: (config: AiApiConfig) => void;
 };

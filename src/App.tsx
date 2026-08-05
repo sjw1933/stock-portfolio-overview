@@ -15,6 +15,7 @@ import { applyQuotes, defaultQuoteViewSession, fetchLatestQuotes, getUsMarketSes
 import { AlertTriangle, BrainCircuit } from 'lucide-react';
 import { fetchRiskAnalysis } from './utils/riskAnalysis';
 import { fetchHoldingNews } from './utils/holdingNews';
+import { readNewsSources, writeNewsSources, type NewsSourceId } from './utils/newsSources';
 import { clearSharedSnapshot, fetchSharedSnapshot, pushSharedSnapshot, readSavedSnapshot, saveSnapshotFromDraft } from './utils/snapshotStorage';
 import { aiConfigPayload, readAiConfig, saveAiConfig } from './utils/aiConfig';
 import { applySell, reverseSell } from './utils/sellTransactions';
@@ -22,7 +23,7 @@ import { applyBuy, reverseBuy } from './utils/buyTransactions';
 
 const dailyRiskAnalysisLimit = 3;
 const riskAnalysisCacheKey = 'gup-risk-analysis-cache-v2';
-const holdingNewsCacheKey = 'gup-holding-news-cache-v5';
+const holdingNewsCacheKey = 'gup-holding-news-cache-v6';
 const holdingNewsAiEnabledKey = 'gup-holding-news-ai-enabled-v1';
 const tabs: Tab[] = ['overview', 'holdings', 'returns', 'trends', 'ask', 'import'];
 
@@ -100,6 +101,7 @@ export function App() {
   const [holdingNews, setHoldingNews] = useState<Awaited<ReturnType<typeof fetchHoldingNews>> | null>(null);
   const [newsStatus, setNewsStatus] = useState<HoldingNewsStatus>('idle');
   const [newsAiEnabled, setNewsAiEnabledState] = useState(readHoldingNewsAiEnabled);
+  const [newsSources, setNewsSourcesState] = useState<NewsSourceId[]>(readNewsSources);
   const [aiConfigState, setAiConfigState] = useState(readAiConfig);
 
   const setAiConfig = useCallback((config: typeof aiConfigState) => {
@@ -110,6 +112,11 @@ export function App() {
   const setNewsAiEnabled = useCallback((enabled: boolean) => {
     localStorage.setItem(holdingNewsAiEnabledKey, String(enabled));
     setNewsAiEnabledState(enabled);
+  }, []);
+
+  const setNewsSources = useCallback((sources: NewsSourceId[]) => {
+    writeNewsSources(sources);
+    setNewsSourcesState(sources);
   }, []);
 
   const setTab = useCallback((nextTab: Tab) => {
@@ -126,7 +133,7 @@ export function App() {
     const controller = new AbortController();
     setNewsStatus('loading');
     try {
-      const result = await fetchHoldingNews(holdings, controller.signal);
+      const result = await fetchHoldingNews(holdings, controller.signal, newsSources);
       writeHoldingNewsCache({ day: todayKey(), result });
       setHoldingNews(result);
       setNewsStatus(result.source === 'fallback' ? 'fallback' : 'live');
@@ -134,7 +141,7 @@ export function App() {
       console.warn('holding news failed', error);
       setNewsStatus('error');
     }
-  }, [holdings]);
+  }, [holdings, newsSources]);
 
   const applySavedSnapshot = useCallback((snapshot: SavedSnapshot) => {
     setSavedSnapshot(snapshot);
@@ -334,7 +341,7 @@ export function App() {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setNewsStatus('loading');
-      void fetchHoldingNews(holdings, controller.signal)
+      void fetchHoldingNews(holdings, controller.signal, newsSources)
         .then((result) => {
           writeHoldingNewsCache({ day: todayKey(), result });
           setHoldingNews(result);
@@ -350,7 +357,7 @@ export function App() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [holdings]);
+  }, [holdings, newsSources]);
 
   useEffect(() => {
     const cache = readRiskAnalysisCache();
@@ -404,7 +411,7 @@ export function App() {
 
   const riskSummary = riskAnalysis?.summary ?? (riskAnalysisStatus === 'loading' ? '正在调用大模型生成持仓风险解读。' : '当前展示本地硬规则预警。');
   const newsItems = holdingNews?.items ?? [];
-  const newsSummary = holdingNews?.summary ?? (newsStatus === 'loading' ? '正在按持仓 ticker 抓取 Yahoo/Google 与 Investing 相关新闻。' : '按持仓 ticker 聚合 Yahoo/Google 新闻，并用关键词补匹配 Investing 资讯。');
+  const newsSummary = holdingNews?.summary ?? (newsStatus === 'loading' ? '正在按所选新闻源抓取持仓相关资讯…' : '可在新闻设置中切换腾讯财经 / Investing / Yahoo / Google 等源。');
   const newsFetchedAt = holdingNews?.fetchedAt ?? '';
 
   const context = {
@@ -449,6 +456,8 @@ export function App() {
     refreshNews,
     newsAiEnabled,
     setNewsAiEnabled,
+    newsSources,
+    setNewsSources,
     aiConfig: aiConfigState,
     setAiConfig,
   };

@@ -730,7 +730,8 @@ button {
 }
 
 .news-actions,
-.news-filter-pills {
+.news-filter-pills,
+.news-source-pills {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -738,14 +739,30 @@ button {
   margin: -2px 0 2px;
 }
 
-.news-filter-pills {
+.news-filter-pills,
+.news-source-pills {
   gap: 8px;
   margin: 2px 0 5px;
 }
 
+.news-source-label {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.news-source-hint {
+  margin: 0 0 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .news-refresh-button,
 .news-ai-toggle,
-.news-filter-pills button {
+.news-filter-pills button,
+.news-source-pills button {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
@@ -768,16 +785,19 @@ button {
 }
 
 .news-ai-toggle.active,
-.news-filter-pills button.active {
+.news-filter-pills button.active,
+.news-source-pills button.active {
   border-color: #93b9ff;
   background: #eef5ff;
   color: #1769e8;
 }
 
-.news-filter-pills button {
+.news-filter-pills button,
+.news-source-pills button {
   min-height: 36px;
   padding: 0 13px;
   color: #334155;
+  cursor: pointer;
 }
 
 .news-filter-pills button.active {
@@ -786,9 +806,17 @@ button {
   box-shadow: 0 8px 18px rgba(23, 105, 232, 0.22);
 }
 
+.news-source-pills button.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 6px 14px rgba(15, 118, 110, 0.18);
+}
+
 .news-refresh-button:focus-visible,
 .news-ai-toggle:focus-visible,
-.news-filter-pills button:focus-visible {
+.news-filter-pills button:focus-visible,
+.news-source-pills button:focus-visible {
   outline: 3px solid rgba(23, 105, 232, 0.22);
   outline-offset: 2px;
 }
